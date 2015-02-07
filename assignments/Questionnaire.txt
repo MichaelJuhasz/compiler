@@ -6,57 +6,69 @@
 			     Spring 2015
 
 
-Name:				Work phone number:
+Name: Michael Juhasz  Work phone number: (617) 495-3423
 
 
-E-mail:				Home phone number:
+E-mail: michael.juhasz@gmail.com	Home phone number: (206) 225-8991
 
 
 Occupation:
 
-	If you're a full-time student, what is your department, field, and
-	    year and at which school?  Are you currently in a degree program?
+	Librarian
 
 
 Have you taken CSCI E-10a (Formerly E-50a), CSCI E-10b (Formerly E-50b),
 CSCI E-50 (Formerly E-52), and/or CSCI E-28 (Unix Systems Programming)
 (Formerly CSCI E-215) or equivalents (specify which)?
 
+Yes, yes, no, no.
 
 Have you taken CSCI E-22 (Data Structures) (Formerly CSCI E-119)?
 
-	If not, how do you meet the prerequisite?
+	Yes
 
 
 Have you taken CSCI E-124 (Data Structures and Algorithms)?
 
-	If not, how do you meet the prerequisite?
+	I haven't, since that prerequisite was only "preferred."  
+	Is it more crucial than I'd assumed?
 
 
 Are you already registered for this class?  -- If not, do you intend
 to register?
 
+	Yes
 
 What additional appropriate course or work experience do you have?
 
+	 A few other extension school courses in CS.
 
 What is your math background?
 
+	Last math course I took was Calculus, 10+ years ago.
 
 What computer languages do you know (please include assembler and
 high-level languages)?
 
+	Java, Javascript, MIPS (from CSCI E-10b) PHP, Processing
 
 What operating systems have you used?
 
+	Windows 3-8, spottier with Apple, but occasional use going back to Apple II.
 
 What computers have you used?
 
+	Not sure what you're asking.
 
 Why are you taking the course?
 
+	It seems interesting and fulfills a degree requirement.
 
 If the class needs to be rescheduled, is Thursday evening acceptable?
 
+	Not really.
 
 Other comments (please continue on the back):
+
+	I have recently made an important and alarming discovery 
+											(continued on back)
