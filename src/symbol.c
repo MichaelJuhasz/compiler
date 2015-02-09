@@ -103,7 +103,7 @@ void symbol_print_table(FILE *output, struct symbol_table *table) {
   fputs("symbol table:\n", output);
 
   for (iter = table->variables; NULL != iter; iter = iter->next) {
-    fprintf(output, "  variable: %s$%p\n", iter->symbol.name, &iter->symbol);
+    fprintf(output, "  variable: %s$%p\n", iter->symbol.name, (void *)&iter->symbol);
   }
   fputs("\n", output);
 }

@@ -133,8 +133,6 @@ struct result *node_get_result(struct node *expression) {
 void node_print_expression(FILE *output, struct node *expression);
 
 void node_print_binary_operation(FILE *output, struct node *binary_operation) {
-  assert(NULL != binary_operation);
-
   static const char *binary_operators[] = {
     "*",    /*  0 = BINOP_MULTIPLICATION */
     "/",    /*  1 = BINOP_DIVISION */
@@ -144,7 +142,7 @@ void node_print_binary_operation(FILE *output, struct node *binary_operation) {
     NULL
   };
 
-  assert(NODE_BINARY_OPERATION == binary_operation->kind);
+  assert(NULL != binary_operation && NODE_BINARY_OPERATION == binary_operation->kind);
 
   fputs("(", output);
   node_print_expression(output, binary_operation->data.binary_operation.left_operand);
