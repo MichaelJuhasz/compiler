@@ -69,6 +69,24 @@ int scan_only(FILE *output) {
           token_type = "rsvwd"; token_name = "SIGNED"; break;
         case UNSIGNED:
           token_type = "rsvwd"; token_name = "UNSIGNED"; break;
+        case BREAK:
+          token_type = "rsvwd"; token_name = "BREAK"; break;
+        case CONTINUE:
+          token_type = "rsvwd"; token_name = "CONTINUE"; break;
+        case DO:
+          token_type = "rsvwd"; token_name = "DO"; break;
+        case ELSE:
+          token_type = "rsvwd"; token_name = "ELSE"; break;          
+        case FOR:
+          token_type = "rsvwd"; token_name = "FOR"; break;
+        case GOTO:
+          token_type = "rsvwd"; token_name = "GOTO"; break;
+        case IF:
+          token_type = "rsvwd"; token_name = "IF"; break;
+        case VOID:
+          token_type = "rsvwd"; token_name = "VOID"; break;
+        case WHILE:
+          token_type = "rsvwd"; token_name = "WHILE"; break;
 
         case ASTERISK:
           token_type = "op"; token_name = "ASTERISK"; break;
@@ -86,12 +104,90 @@ int scan_only(FILE *output) {
           token_type = "op"; token_name = "RIGHT_PAREN"; break;
         case SEMICOLON:
           token_type = "op"; token_name = "SEMICOLON"; break;
+        case CARET:
+          token_type = "op"; token_name = "CARET"; break;
+        case COLON:
+          token_type = "op"; token_name = "COLON"; break;
+        case COMMA:
+          token_type = "op"; token_name = "COMMA"; break;
+        case EXCLAMATION:
+          token_type = "op"; token_name = "EXCLAMATION"; break;
+        case GREATER:
+          token_type = "op"; token_name = "GREATER"; break;
+        case LESS:
+          token_type = "op"; token_name = "LESS"; break;
+        case PERCENT:
+          token_type = "op"; token_name = "PERCENT"; break;
+        case QUESTION:
+          token_type = "op"; token_name = "QUESTION"; break; 
+        case TILDE:
+          token_type = "op"; token_name = "TILDE"; break;
+        case VBAR:
+          token_type = "op"; token_name = "VBAR"; break;
+        case AMPERSAND:
+          token_type = "op"; token_name = "AMPERSAND"; break;  
+        case AMPERSAND_AMPERSAND:
+          token_type = "op"; token_name = "AMPERSAND_AMPERSAND"; break;
+        case AMPERSAND_EQUAL:
+          token_type = "op"; token_name = "AMPERSAND_EQUAL"; break;
+        case ASTERISK_EQUAL:
+          token_type = "op"; token_name = "ASTERISK_EQUAL"; break;
+        case CARET_EQUAL:
+          token_type = "op"; token_name = "CARET_EQUAL"; break;
+        case EQUAL_EQUAL:
+          token_type = "op"; token_name = "EQUAL_EQUAL"; break;
+        case EXCLAMATION_EQUAL:
+          token_type = "op"; token_name = "EXCLAMATION_EQUAL"; break;
+        case GREATER_EQUAL:
+          token_type = "op"; token_name = "GREATER_EQUAL"; break;
+        case GREATER_GREATER:
+          token_type = "op"; token_name = "GREATER_GREATER"; break;
+        case GREATER_GREATER_EQUAL:
+          token_type = "op"; token_name = "GREATER_GREATER_EQUAL"; break;
+        case LESS_EQUAL:
+          token_type = "op"; token_name = "LESS_EQUALS"; break;
+        case LESS_LESS:
+          token_type = "op"; token_name = "LESS_LESS"; break;
+        case LESS_LESS_EQUAL:
+          token_type = "op"; token_name = "LESS_LESS_EQUAL"; break;
+        case MINUS_EQUAL:
+          token_type = "op"; token_name = "MINUS_EQUAL"; break;
+        case MINUS_MINUS:
+          token_type = "op"; token_name = "MINUS_MINUS"; break;
+        case PERCENT_EQUAL:
+          token_type = "op"; token_name = "PERCENT_EQUAL"; break;
+        case PLUS_PLUS:
+          token_type = "op"; token_name = "PLUS_PLUS"; break;
+        case SLASH_EQUAL:
+          token_type = "op"; token_name = "SLASH_EQUAL"; break;
+        case VBAR_EQUAL:
+          token_type = "op"; token_name = "VBAR_EQUAL"; break;
+        case VBAR_VBAR:
+          token_type = "op"; token_name = "VBAR_VBAR"; break;
+        case LEFT_CURLY:
+          token_type = "op"; token_name = "LEFT_CURLY"; break;
+        case RIGHT_CURLY:
+          token_type = "op"; token_name = "RIGHT_CURLY"; break;
+        case LEFT_SQUARE:
+          token_type = "op"; token_name = "LEFT_SQUARE"; break;
+        case RIGHT_SQUARE:
+          token_type = "op"; token_name = "RIGHT_SQUARE"; break;
+
+        case AT:
+          token_type = "spc"; token_name = "AT"; break;  
+        case DOLLAR:
+          token_type = "spc"; token_name = "DOLLAR"; break; 
+        case GRAVE:
+          token_type = "spc"; token_name = "GRAVE"; break;           
 
         case NUMBER:
           token_type = "num"; token_name = "NUMBER"; break;
 
         case IDENTIFIER:
           token_type = "id"; token_name = "IDENTIFIER"; break;
+
+        case STRING:
+          token_type = "string"; token_name = "STRING"; break;
 
         default:
           assert(0);
@@ -103,16 +199,26 @@ int scan_only(FILE *output) {
       num_errors++;
     }
 
-    fprintf(output, "   %5s = %-20s", token_type, token_name);
+    fprintf(output, "   %5s = %-10s", token_type, token_name);
 
-    if (0 == strcmp("number", token_type)) {
+    if (0 == strcmp("num", token_type)) {
       /* Print the type and value. */
-      fprintf(output, "   type = %8s %-12s   value = %-10lu\n",
-              "UNSIGNED", "LONG", yylval->data.number.value);
+      if (yylval->data.number.type == 0)
+        fprintf(output, "    type = char   value = %-10lu\n", yylval->data.number.value);
+      if (yylval->data.number.type == 1)
+        fprintf(output, "    type = short   value = %-10lu\n", yylval->data.number.value);
+      if (yylval->data.number.type == 2)
+      fprintf(output, "    type = int/long   value = %-10lu\n", yylval->data.number.value);
       /* This might be a good place to indicate overflow if it happened. */
     } else if (0 == strcmp("id", token_type)) {
         fprintf(output, "    name = %s\n", yylval->data.identifier.name);
-    } else {
+    } 
+    else if (0 == strcmp("string", token_type))
+    {
+      fprintf(output, "   length = %-5d   value = %-10s\n", yylval->data.string.len, yylval->data.string.text);
+    }
+
+    else {
       fputs("\n", output);
     }
 
@@ -158,7 +264,7 @@ int main(int argc, char **argv) {
   if (0 == strcmp("scanner", stage)) {
     int num_errors = scan_only(stdout);
     if (num_errors > 0) {
-      print_errors_from_pass(stdout, "Scanner", yynerrs);
+      print_errors_from_pass(stdout, "Scanner", num_errors);
       return 2;
     } else {
       return 0;

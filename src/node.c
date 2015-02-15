@@ -52,11 +52,31 @@ struct node *node_identifier(char *text, int length)
 }
 
 /*
+ * node_string - allocate a node to represent a string
+ *
+ * Parameters:
+ *   text - string - contains the name of the identifier
+ *
+ * Returns a NUL-terminated string in newly allocated memory, containing the
+ *  text of the string.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
+struct node *node_string(char *text, int len)
+{
+  struct node *node = node_create(NODE_STRING);
+  strcpy(node->data.string.text, text);
+  node->data.string.len = len;
+  return node;
+}
+
+/*
  * node_number - allocate a node to represent a number
  *
  * Parameters:
  *   text - string - contains the numeric constant
- *   length - integer - the length of text (not including terminating NUL)
  *
  * Returns a node containing the value and an error flag. The value is computed
  *   using strtoul. If the error flag is set, the integer constant was too large
@@ -70,15 +90,58 @@ struct node *node_number(char *text)
   struct node *node = node_create(NODE_NUMBER);
 
   errno = 0;
-  node->data.number.value = strtoul(text, NULL, 10);
-  if (node->data.number.value == ULONG_MAX && ERANGE == errno) {
-    /* Strtoul indicated overflow. */
-    node->data.number.overflow = true;
-  } else if (node->data.number.value > 4294967295ul) {
-    /* Value is too large for 32-bit unsigned long type. */
-    node->data.number.overflow = true;
-  } else {
-    node->data.number.overflow = false;
+  if (text[0] != '\'')
+  {
+    node->data.number.value = strtoul(text, NULL, 10);
+    if (node->data.number.value == ULONG_MAX && ERANGE == errno) {
+      /* Strtoul indicated overflow. */
+      node->data.number.overflow = true;
+    } else if (node->data.number.value > 4294967295ul) {
+      /* Value is too large for 32-bit unsigned long type. */
+      node->data.number.overflow = true;
+    } else {
+      node->data.number.overflow = false;
+      if (node->data.number.value < 256)
+          node->data.number.type = 0;
+      else if (node->data.number.value < 65536)
+          node->data.number.type = 1;
+      else if (node->data.number.value < 4294967295ul)
+          node->data.number.type = 2;  
+    }
+  }
+    /* Escaped characters and octal codes need to be translated into their
+     * proper representation.  Characters with a length of three are 
+     * regular, single character constants.  Over three means an escape code, 
+     * thus we grab the third element (that which follows the '\').
+     */
+  else {
+    if (strlen(text) == 3) 
+      node->data.number.value = text[1];
+    else 
+    {
+      char c = 0;
+      switch(text[2])
+      {
+        case 'a':     c = '\a'; break;
+        case 'b':     c = '\b'; break;
+        case 'f':     c = '\f'; break;
+        case 'n':     c = '\n'; break;
+        case 'r':     c = '\r'; break;
+        case 't':     c = '\t'; break;
+        case 'v':     c = '\v'; break;
+        case '\\':    c = '\\'; break;
+        case '\'':    c = '\''; break;
+        case '\"':    c = '\"'; break;
+        case '\?':    c = '\?'; break;
+        default:      { unsigned int i;
+                        sscanf(text + 2,"%o",&i);
+                        c = (char)i;
+                      }
+      }
+      node->data.number.value = c;
+    }
+
+    node->data.number.type = 0;
   }
 
   node->data.number.result.type = NULL;

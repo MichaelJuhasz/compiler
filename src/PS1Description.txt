@@ -1,0 +1,6 @@
+PS1 Description
+Michael Juhasz
+
+This application uses a flex scanner to lexically analyize C89-like code.  "Make test" will run a test file through the scanner, generating tokens for the C89-like set of operators, reserved words, constant types and identifiers, as well as test the error catching features of the scanner.  Detected errors include unclosed strings, unterminated characters, incorrect escape characters, octal or hex constants, and floating point numbers.  The output of the scanner will be put into a file called test.txt.
+
+Alternatively, if compiler.exe is run, arbitrary input - either a from file, or from standard input - can be fed to the scanner.
