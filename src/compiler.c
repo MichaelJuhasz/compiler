@@ -171,14 +171,7 @@ int scan_only(FILE *output) {
         case LEFT_SQUARE:
           token_type = "op"; token_name = "LEFT_SQUARE"; break;
         case RIGHT_SQUARE:
-          token_type = "op"; token_name = "RIGHT_SQUARE"; break;
-
-        case AT:
-          token_type = "spc"; token_name = "AT"; break;  
-        case DOLLAR:
-          token_type = "spc"; token_name = "DOLLAR"; break; 
-        case GRAVE:
-          token_type = "spc"; token_name = "GRAVE"; break;           
+          token_type = "op"; token_name = "RIGHT_SQUARE"; break;        
 
         case NUMBER:
           token_type = "num"; token_name = "NUMBER"; break;
@@ -204,11 +197,10 @@ int scan_only(FILE *output) {
     if (0 == strcmp("num", token_type)) {
       /* Print the type and value. */
       if (yylval->data.number.type == 0)
-        fprintf(output, "    type = char   value = %-10lu\n", yylval->data.number.value);
+        fprintf(output, "    type = int   value = %-10lu\n", yylval->data.number.value);
       if (yylval->data.number.type == 1)
-        fprintf(output, "    type = short   value = %-10lu\n", yylval->data.number.value);
-      if (yylval->data.number.type == 2)
-      fprintf(output, "    type = int/long   value = %-10lu\n", yylval->data.number.value);
+        fprintf(output, "    type = unsigned long   value = %-10lu\n", yylval->data.number.value);
+     
       /* This might be a good place to indicate overflow if it happened. */
     } else if (0 == strcmp("id", token_type)) {
         fprintf(output, "    name = %s\n", yylval->data.identifier.name);

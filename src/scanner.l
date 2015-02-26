@@ -21,9 +21,6 @@
   #include "parser.h"
 
   void warning(char *msg)
-  {
-     printf("%s error at line %d\n", msg, yylineno);
-  }
 
 %}
 /* Two start conditions have been added, as well as a number of 
@@ -33,7 +30,7 @@
 %x expString
 %x comment
 
-newline         \n|[\r\n]
+newline         \n|\r\n
 ws              [ \t\v\f]
 
 digit           [[:digit:]]
@@ -140,12 +137,7 @@ badNum          {digit}+((\.{digit}+)|{digit}*[uUlLAa]+)
 \[           return LEFT_SQUARE;
 
 \]           return RIGHT_SQUARE;
-
-@            return AT;
- 
-\$           return DOLLAR;
-
-`            return GRAVE;         
+       
 
   /* operators end */
 
@@ -171,7 +163,10 @@ while        return WHILE;
 
   /* constants begin */
 
-{character} |
+{character} {
+                yylval = node_number(yytext); 
+                return NUMBER;
+            }
 
 {number}    {
                 yylval = node_number(yytext); 
@@ -261,4 +256,7 @@ while        return WHILE;
 .            return -1;
 
 %%
-
+void warning(char *msg)
+{
+    printf("%s error at line %d\n", msg, yylineno);
+}
