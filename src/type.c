@@ -139,11 +139,12 @@ void type_convert_assignment(struct node *binary_operation) {
     node_get_result(binary_operation->data.binary_operation.left_operand)->type;
 }
 
+
 void type_assign_in_binary_operation(struct node *binary_operation) {
   assert(NODE_BINARY_OPERATION == binary_operation->kind);
   type_assign_in_expression(binary_operation->data.binary_operation.left_operand);
   type_assign_in_expression(binary_operation->data.binary_operation.right_operand);
-
+  /*
   switch (binary_operation->data.binary_operation.operation) {
     case BINOP_MULTIPLICATION:
     case BINOP_DIVISION:
@@ -160,6 +161,7 @@ void type_assign_in_binary_operation(struct node *binary_operation) {
       assert(0);
       break;
   }
+*/
 }
 
 

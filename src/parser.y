@@ -17,6 +17,9 @@
 
 %}
 
+%nonassoc LOWER_THAN_ELSE
+%nonassoc ELSE
+
 %token IDENTIFIER NUMBER STRING
 
 %token BREAK CHAR CONTINUE DO ELSE FOR GOTO IF
@@ -55,9 +58,9 @@ postfix_expr
   | subscript_expr 
   | function_call
   | postfix_expr PLUS_PLUS
-        { $$ = node_unary_operation(OP_PLUS_PLUS, $1); }
+        { $$ = node_postfix(OP_PLUS_PLUS, $1); }
   | postfix_expr MINUS_MINUS
-        { $$ = node_unary_operation(OP_MINUS_MINUS, $1); }
+        { $$ = node_postfix(OP_MINUS_MINUS, $1); }
 ;
 
 subscript_expr
@@ -82,9 +85,9 @@ expression_list
 unary_expr
   : postfix_expr
   | PLUS_PLUS unary_expr
-        { $$ = node_unary_operation(OP_PLUS_PLUS, $2); }
+        { $$ = node_prefix(OP_PLUS_PLUS, $2); }
   | MINUS_MINUS unary_expr
-        { $$ = node_unary_operation(OP_MINUS_MINUS, $2); }
+        { $$ = node_prefix(OP_MINUS_MINUS, $2); }
   | unary_op cast_expr
         { $$ = node_unary_operation($1->data.operation.operation, $2); }
 ;
@@ -111,9 +114,9 @@ cast_expr
 ;
 
 multiplicative_expr
-  : primary_expr
+  : cast_expr
 
-  | multiplicative_expr multiplicative_op primary_expr
+  | multiplicative_expr multiplicative_op cast_expr
           { $$ = node_binary_operation($2->data.operation.operation, $1, $3); }
 ;
 
@@ -155,7 +158,7 @@ shift_op
 
 relational_expr
   : shift_expr
-  | relational_expr relational_op relational_expr
+  | relational_expr relational_op shift_expr
           { $$ = node_binary_operation($2->data.operation.operation, $1, $3); }
 ;
 
@@ -265,6 +268,8 @@ constant_expr
 decl
   : declaration_specifiers initialized_declarator_list SEMICOLON
         { $$ = node_decl($1, $2); } 
+  | error SEMICOLON
+        { yyerrok; }
 ;
 
 declaration_specifiers
@@ -291,31 +296,32 @@ signed
 
 type_specifier
   : CHAR
-        { $$ = node_type(SIGNED, TP_CHAR); } 
+        { $$ = node_type(TP_SIGNED, TP_CHAR); } 
   | signed CHAR
         { $$ = node_type($1->data.operation.operation, TP_CHAR); } 
   | SHORT
-        { $$ = node_type(SIGNED, TP_SHORT); } 
+        { $$ = node_type(TP_SIGNED, TP_SHORT); } 
   | signed SHORT
         { $$ = node_type($1->data.operation.operation, TP_SHORT); } 
   | SHORT INT
-        { $$ = node_type(SIGNED, TP_SHORT); } 
+        { $$ = node_type(TP_SIGNED, TP_SHORT); } 
   | signed SHORT INT
         { $$ = node_type($1->data.operation.operation, TP_SHORT); } 
   | INT
-        { $$ = node_type(SIGNED, TP_INT); } 
+        { $$ = node_type(TP_SIGNED, TP_INT); } 
   | signed INT
         { $$ = node_type($1->data.operation.operation, TP_INT); } 
-  | signed 
-        { $$ = node_type($1->data.operation.operation, TP_INT); } 
+
   | LONG
-        { $$ = node_type(SIGNED, TP_LONG); } 
-  | SIGNED LONG
+        { $$ = node_type(TP_SIGNED, TP_LONG); } 
+  | signed LONG
         { $$ = node_type($1->data.operation.operation, TP_LONG); } 
   | LONG INT
-        { $$ = node_type(SIGNED, TP_LONG); } 
+        { $$ = node_type(TP_SIGNED, TP_LONG); } 
   | signed LONG INT
         { $$ = node_type($1->data.operation.operation, TP_LONG); } 
+  | signed 
+        { $$ = node_type($1->data.operation.operation, TP_INT); } 
   | VOID
         { $$ = node_type(0, TP_VOID); } 
 ;
@@ -337,6 +343,8 @@ direct_declarator
 function_declarator
   : direct_declarator LEFT_PAREN parameter_list RIGHT_PAREN
         { $$ = node_function_declarator($1, $3); }
+  | direct_declarator LEFT_PAREN RIGHT_PAREN
+        { $$ = node_function_declarator($1, NULL); }
 ;
 
 array_declarator
@@ -384,13 +392,13 @@ abstract_declarator
 
 direct_abstract_declarator
   : LEFT_PAREN abstract_declarator RIGHT_PAREN
-        { $$ = node_array_declarator(NULL, $2); }
+        { $$ = node_dir_abst_dec(NULL, $2, 0); }
   | direct_abstract_declarator LEFT_SQUARE constant_expr RIGHT_SQUARE
-        { $$ = node_array_declarator($1, $3); }
+        { $$ = node_dir_abst_dec($1, $3, 1); }
   | direct_abstract_declarator LEFT_SQUARE RIGHT_SQUARE
-        { $$ = node_array_declarator($1, NULL); }
+        { $$ = node_dir_abst_dec($1, NULL, 1); }
   | LEFT_SQUARE RIGHT_SQUARE
-        { $$ = node_array_declarator(NULL, NULL); }
+        { $$ = node_dir_abst_dec(NULL, NULL, 1); }
 ;
 
 statement
@@ -428,7 +436,7 @@ declaration_or_statement
 ;
 
 conditional_statement
-  : IF LEFT_PAREN expr RIGHT_PAREN statement
+  : IF LEFT_PAREN expr RIGHT_PAREN statement %prec LOWER_THAN_ELSE
           { $$ = node_conditional($3, $5, NULL); }
   | IF LEFT_PAREN expr RIGHT_PAREN statement ELSE statement
           { $$ = node_conditional($3, $5, $7); }
@@ -436,8 +444,11 @@ conditional_statement
 
 iterative_statement
   : WHILE LEFT_PAREN expr RIGHT_PAREN statement
+          { $$ = node_while($3, $5, 0); }
   | DO statement WHILE LEFT_PAREN expr RIGHT_PAREN SEMICOLON
+          { $$ = node_while($5, $2, 1); }
   | FOR for_expr statement
+          { $$ = node_while($2, $3, 2); }
 ;
 
 expression_statement 
@@ -446,31 +457,47 @@ expression_statement
 ;
 
 for_expr
-  : LEFT_PAREN expr SEMICOLON expr SEMICOLON expr SEMICOLON RIGHT_PAREN
-  | LEFT_PAREN expr SEMICOLON SEMICOLON expr SEMICOLON RIGHT_PAREN
-  | LEFT_PAREN expr SEMICOLON expr SEMICOLON SEMICOLON
-  | LEFT_PAREN expr SEMICOLON SEMICOLON SEMICOLON RIGHT_PAREN
-  | LEFT_PAREN SEMICOLON expr SEMICOLON expr SEMICOLON RIGHT_PAREN
-  | LEFT_PAREN SEMICOLON SEMICOLON expr SEMICOLON RIGHT_PAREN
-  | LEFT_PAREN SEMICOLON expr SEMICOLON SEMICOLON RIGHT_PAREN
-  | LEFT_PAREN SEMICOLON SEMICOLON SEMICOLON RIGHT_PAREN
+  : LEFT_PAREN expr SEMICOLON expr SEMICOLON expr RIGHT_PAREN
+          { $$ = node_for($2, $4, $6); }
+  | LEFT_PAREN expr SEMICOLON SEMICOLON expr RIGHT_PAREN
+          { $$ = node_for($2, NULL, $5); }
+  | LEFT_PAREN expr SEMICOLON expr SEMICOLON RIGHT_PAREN
+          { $$ = node_for($2, $4, NULL); }
+  | LEFT_PAREN expr SEMICOLON SEMICOLON RIGHT_PAREN
+          { $$ = node_for($2, NULL, NULL); }
+  | LEFT_PAREN SEMICOLON expr SEMICOLON expr RIGHT_PAREN
+          { $$ = node_for(NULL, $3, $5); }
+  | LEFT_PAREN SEMICOLON SEMICOLON expr RIGHT_PAREN
+          { $$ = node_for(NULL, NULL, $4); }
+  | LEFT_PAREN SEMICOLON expr SEMICOLON RIGHT_PAREN
+          { $$ = node_for(NULL, $3, NULL); }
+  | LEFT_PAREN SEMICOLON SEMICOLON RIGHT_PAREN
+          { $$ = node_for(NULL, NULL, NULL); }
 ;
 
 jump_statement 
   : GOTO IDENTIFIER SEMICOLON
+          { $$ = node_jump(JP_GOTO, $2); }
   | CONTINUE SEMICOLON
+          { $$ = node_jump(JP_CONTINUE, NULL); }
   | BREAK SEMICOLON
+          { $$ = node_jump(JP_BREAK, NULL); }
   | RETURN SEMICOLON
+          { $$ = node_jump(JP_RETURN, NULL); }
   | RETURN expr SEMICOLON
+          { $$ = node_jump(JP_RETURN, $2); }
 ;
 
 null_statement 
   : SEMICOLON
+          { $$ = node_semi_colon(); }
 ;
 
 translation_unit 
   : top_level_decl
+          { $$ = node_translation_unit(NULL, $1); }
   | translation_unit top_level_decl
+          { $$ = node_translation_unit($1, $2); }
 ;
 
 top_level_decl
@@ -480,7 +507,9 @@ top_level_decl
 
 function_definition
   : declaration_specifiers declarator compound_statement
+        { $$ = node_function_definition($1, $2, $3); }
   | declarator compound_statement
+        { $$ = node_function_definition(NULL, $1, $2); }
 ;
 
 program

@@ -67,7 +67,8 @@ struct node *node_identifier(char *text, int length)
 struct node *node_string(char *text, int len)
 {
   struct node *node = node_create(NODE_STRING);
-  strcpy(node->data.string.text, text);
+  memcpy(node->data.string.text, text, len);
+  /*  strcpy(node->data.string.text, text); */
   node->data.string.len = len;
   return node;
 }
@@ -95,12 +96,12 @@ struct node *node_number(char *text)
     node->data.number.value = strtoul(text, NULL, 10);
     if (node->data.number.value == ULONG_MAX && ERANGE == errno) {
       /* Strtoul indicated overflow. */
-      node->data.number.overflow = true;
+      node->data.number.overflow = 1;
     } else if (node->data.number.value > 4294967295ul) {
       /* Value is too large for 32-bit unsigned long type. */
-      node->data.number.overflow = true;
+      node->data.number.overflow = 1;
     } else {
-      node->data.number.overflow = false;
+      node->data.number.overflow = 0;
       if (node->data.number.value < 2147483648)
           node->data.number.type = 0;
       else if (node->data.number.value < 4294967295ul)
@@ -211,8 +212,8 @@ struct node *node_cast(struct node *type, struct node *cast)
 struct node *node_type(int sign, int type)
 {
   struct node *node = node_create(NODE_TYPE);
-  node->data.type.sign->sign;
-  node->data.type.type->type;
+  node->data.type.sign = sign;
+  node->data.type.type = type;
   return node;
 }
 
@@ -248,7 +249,7 @@ struct node *node_pointer_declarator(struct node *pointer_list, struct node *dir
 struct node *node_function_declarator(struct node *dir_dec, struct node *params)
 {
   struct node *node = node_create(NODE_FUNCTION_DECLARATOR);
-  node->data.function_declarator.decalartor = dir_dec;
+  node->data.function_declarator.dir_dec = dir_dec;
   node->data.function_declarator.params = params;
   return node;
 }
@@ -257,7 +258,7 @@ struct node *node_function_declarator(struct node *dir_dec, struct node *params)
 struct node *node_array_declarator(struct node *dir_dec, struct node *constant)
 {
   struct node *node = node_create(NODE_ARRAY_DECLARATOR);
-  node->data.array_declarator.declarator = dir_dec;
+  node->data.array_declarator.dir_dec = dir_dec;
   node->data.array_declarator.constant = constant;
   return node;
 }
@@ -311,6 +312,87 @@ struct node *node_operator(int op)
 {
   struct node *node = node_create(NODE_OPERATOR);
   node->data.operation.operation = op;
+  return node;
+}
+
+/* MINE */
+struct node *node_while(struct node *expr, struct node *statement, int type)
+{
+  struct node *node = node_create(NODE_WHILE);
+  node->data.while_loop.expr = expr;
+  node->data.while_loop.statement = statement;
+  node->data.while_loop.type = type;
+  return node;
+}
+
+/* MINE */
+struct node *node_for(struct node *expr1, struct node *expr2, struct node *expr3)
+{
+  struct node *node = node_create(NODE_FOR);
+  node->data.for_loop.expr1 = expr1;
+  node->data.for_loop.expr2 = expr2;
+  node->data.for_loop.expr3 = expr3;
+  return node;
+}
+
+/* MINE */
+struct node *node_jump(int type, struct node *expr)
+{
+  struct node *node = node_create(NODE_JUMP);
+  node->data.jump.type = type;
+  node->data.jump.expr = expr;
+  return node;
+} 
+
+/* MINE - This is by far the most important node type*/
+struct node *node_semi_colon()
+{
+  struct node *node = node_create(NODE_SEMI_COLON);
+  return node;
+}
+
+/* MINE */
+struct node *node_function_definition(struct node *type, struct node *declarator, struct node *compound)
+{
+  struct node *node = node_create(NODE_FUNCTION_DEFINITION);
+  node->data.function_definition.type = type;
+  node->data.function_definition.declarator = declarator;
+  node->data.function_definition.compound = compound;
+  return node;
+}
+
+/* MINE */
+struct node *node_translation_unit(struct node *decl, struct node *more_decls)
+{
+  struct node *node = node_create(NODE_TRANSLATION_UNIT);
+  node->data.translation_unit.decl = decl;
+  node->data.translation_unit.more_decls = more_decls;
+  return node;
+}
+
+/* MINE */
+struct node *node_dir_abst_dec(struct node *declarator, struct node *expr, int brackets)
+{
+  struct node *node = node_create(NODE_DIR_ABST_DEC);
+  node->data.dir_abst_dec.declarator = declarator;
+  node->data.dir_abst_dec.expr = expr;
+  node->data.dir_abst_dec.brackets = brackets;
+  return node;
+}
+
+struct node *node_postfix(int op, struct node *expr)
+{
+  struct node *node = node_create(NODE_POSTFIX);
+  node->data.postfix.op = op;
+  node->data.postfix.expr = expr;
+  return node;
+}
+
+struct node *node_prefix(int op, struct node *expr)
+{
+  struct node *node = node_create(NODE_PREFIX);
+  node->data.prefix.op = op;
+  node->data.prefix.expr = expr;
   return node;
 }
 
@@ -402,14 +484,14 @@ void node_print_binary_operation(FILE *output, struct node *binary_operation) {
   fputs(")", output);
 }
 
-void node_print_unary_operation(FILE *output, struct node *binary_operation) {
-  static const char unary_operators[] = {
-    '*',    /*  0 = ASTERISK */
-    '!',    /*  1 = EXCLAMATION */
-    '+',    /*  2 = PLUS */
-    '-',    /*  3 = MINUS */
-    '~',    /*  4 = TILDE */
-    '&',    /*  5 = AMPERSAND */
+void node_print_unary_operation(FILE *output, struct node *unary_operation) {
+  static const char *unary_operators[] = {
+    "*",    /*  0 = ASTERISK */
+    "!",    /*  1 = EXCLAMATION */
+    "+",    /*  2 = PLUS */
+    "-",    /*  3 = MINUS */
+    "~",    /*  4 = TILDE */
+    "&",    /*  5 = AMPERSAND */
     NULL
   };
 
@@ -419,6 +501,20 @@ void node_print_unary_operation(FILE *output, struct node *binary_operation) {
   fputs(unary_operators[unary_operation->data.unary_operation.operation], output);
   node_print_expression(output, unary_operation->data.unary_operation.operand);
   fputs(")", output);
+}
+
+void node_print_postfix(FILE *output, struct node *post){
+  node_print_expression(output, post->data.postfix.expr);
+  if(post->data.postfix.op == OP_PLUS_PLUS)
+    fputs("++", output);
+  else fputs("--", output);
+}
+
+void node_print_prefix(FILE *output, struct node *pre) {
+  if(pre->data.prefix.op == OP_PLUS_PLUS)
+    fputs("++", output);
+  else fputs("--", output);
+  node_print_expression(output, pre->data.prefix.expr);
 }
 
 void node_print_number(FILE *output, struct node *number) {
@@ -432,7 +528,7 @@ void node_print_type(FILE *output, struct node *type) {
   assert(NULL != type);
   assert(NODE_TYPE == type->kind);
 
-  static cont char *types[] = {
+  static const char *types[] = {
     "char",      /* 0 = CHAR */
     "short",     /* 1 = SHORT */
     "int",       /* 2 = INT */
@@ -441,15 +537,9 @@ void node_print_type(FILE *output, struct node *type) {
     NULL
   };
 
-  if (type->data.type.sign == UNSIGNED)
+  if (type->data.type.sign == TP_UNSIGNED)
     fputs("unsigned ", output);
   fputs(types[type->data.type.type], output);
-}
-
-void node_print_comma_list(FILE *output, struct node *comma_list) {
-  node_print_expression(output, comma_list->data.comma_list.second);
-  fputs(", ");
-  node_print_expression(output, comma_list->data.comma_list.first);
 }
 
 void node_print_cast(FILE *output, struct node *cast) {
@@ -462,7 +552,7 @@ void node_print_cast(FILE *output, struct node *cast) {
 void node_print_labeled_statement(FILE *output, struct node *label) {
   node_print_expression(output, label->data.labeled_statement.id);
   fputs(": ", output);
-  node_print_expression(output, label->data.labeled_statement.statement);
+  node_print_statement(output, label->data.labeled_statement.statement);
 }
 
 int node_print_pointer_list(FILE *output, struct node *pointers) {
@@ -474,20 +564,22 @@ int node_print_pointer_list(FILE *output, struct node *pointers) {
 void node_print_pointer_declarator(FILE *output, struct node *pointer_declarator) {
   int parens = node_print_pointer_list(output, pointer_declarator->data.pointer_declarator.list);
   node_print_expression(output, pointer_declarator->data.pointer_declarator.declarator);
-  for (int i = 0; i < parens; i++)
+  int i;
+  for (i = 0; i < parens; i++)
   {
     fputs(")", output);
   }
 }
 
-void node_print_function(FILE *output, struct node *function) {
+void node_print_function_declarator(FILE *output, struct node *function) {
   node_print_expression(output, function->data.function_declarator.dir_dec);
-  fputs("(");
-  node_print_expression(output, function->data.function_declarator.params);
-  fputs(")");  
+  fputs("(", output);
+  if (function->data.function_declarator.params != NULL)
+    node_print_expression(output, function->data.function_declarator.params);
+  fputs(")", output);
 }
 
-void node_print_array(FILE *output, struct node *array) {
+void node_print_array_declarator(FILE *output, struct node *array) {
   if(array->data.array_declarator.dir_dec != NULL)
     node_print_expression(output, array->data.array_declarator.dir_dec);
   fputs("[", output);
@@ -497,22 +589,147 @@ void node_print_array(FILE *output, struct node *array) {
 }
 
 void node_print_compound(FILE *output, struct node *statement_list) {
-  fputs("{", output);
-  if(statement_list->data.compound.statement_list != NULL);
+  fputs("{\n", output);
+  if(statement_list->data.compound.statement_list != NULL)
+  {
     node_print_statement_list(output, statement_list->data.compound.statement_list);
-  fputs("}", output);
+  }
+  fputs("\n}\n", output);
 }
 
 void node_print_conditional(FILE *output, struct node *conditional) {
   fputs("if(", output);
   node_print_expression(output, conditional->data.conditional.expr);
   fputs(")", output);
-  node_print_statment(output, conditional->data.conditional.then_statement);
-  if(conditoinal->data.conditional.else_statement != NULL)
+  node_print_statement(output, conditional->data.conditional.then_statement);
+  if(conditional->data.conditional.else_statement != NULL)
   {
     fputs(" else ", output);
     node_print_statement(output, conditional->data.conditional.else_statement);
   }
+}
+
+void node_print_for(FILE *output, struct node *for_node) {
+  fputs("for (", output);
+  if(for_node->data.for_loop.expr1 != NULL)
+    node_print_expression(output, for_node->data.for_loop.expr1);
+  fputs("; ", output);
+  if(for_node->data.for_loop.expr2 != NULL)
+    node_print_expression(output, for_node->data.for_loop.expr2);
+  fputs("; ", output);
+  if(for_node->data.for_loop.expr3 != NULL)
+    node_print_expression(output, for_node->data.for_loop.expr3);
+  fputs(")", output);
+}
+
+void node_print_while(FILE *output, struct node *while_loop) {
+  switch (while_loop->data.while_loop.type) {
+    case 0:
+      fputs("while (", output);
+      node_print_expression(output, while_loop->data.while_loop.expr);
+      fputs(")", output);
+      node_print_statement(output, while_loop->data.while_loop.statement);
+      break;
+    case 1:
+      fputs("do ", output);
+      node_print_statement(output, while_loop->data.while_loop.statement);
+      fputs("(", output);
+      node_print_expression(output, while_loop->data.while_loop.expr);
+      fputs(");\n", output);
+      break;
+    case 2:
+      node_print_for(output, while_loop->data.while_loop.expr);
+      node_print_statement(output, while_loop->data.while_loop.statement);
+      break;
+    default:   
+      assert(0);
+      break;  
+  }
+}
+
+void node_print_jump(FILE *output, struct node *jump_node) {
+  switch (jump_node->data.jump.type) {
+    case 0:
+      fputs("goto ", output);
+      node_print_expression(output, jump_node->data.jump.expr);
+      fputs(";\n", output);
+      break;
+    case 1: 
+      fputs("continue;\n", output);
+      break;
+    case 2: 
+      fputs("break;\n", output);
+      break;
+    case 3:
+      fputs("return", output);
+      if (jump_node->data.jump.expr != NULL)
+        node_print_expression(output, jump_node->data.jump.expr);
+      fputs(";\n", output);
+      break;
+    default:
+      assert(0);
+      break;
+  }
+}
+
+void node_print_semi_colon(FILE *output) {
+  fputs(";\n", output);
+}
+
+void node_print_function_definition(FILE *output, struct node *function) {
+  if (function->data.function_definition.type != NULL)
+    node_print_expression(output, function->data.function_definition.type);
+  node_print_expression(output, function->data.function_definition.declarator);
+  node_print_statement(output, function->data.function_definition.compound);
+}
+
+void node_print_parameter_decl(FILE *output, struct node *param) {
+  node_print_expression(output, param->data.parameter_decl.type);
+  node_print_expression(output, param->data.parameter_decl.declarator);
+}
+
+void node_print_type_name(FILE *output, struct node *type) {
+  node_print_expression(output, type->data.type_name.type);
+  node_print_expression(output, type->data.type_name.declarator);
+}
+
+void node_print_decl(FILE *output, struct node *decl) {
+  node_print_expression(output, decl->data.decl.type);
+  node_print_expression(output, decl->data.decl.init_decl_list);
+  fputs(";\n", output);
+}
+
+void node_print_dir_abst_dec(FILE *output, struct node *dir_declarator) {
+  if(dir_declarator->data.dir_abst_dec.declarator != NULL)
+    node_print_expression(output, dir_declarator->data.dir_abst_dec.declarator);
+  if(dir_declarator->data.dir_abst_dec.brackets == 0)
+  {
+    fputs("(", output);
+    node_print_expression(output, dir_declarator->data.dir_abst_dec.expr);
+    fputs(")", output);
+  }
+  else {
+    fputs("[", output);
+    if (dir_declarator->data.dir_abst_dec.expr != NULL)
+      node_print_expression(output, dir_declarator->data.dir_abst_dec.expr);
+    fputs("]", output);
+  }
+}
+
+
+void node_print_expression_statement(FILE *output, struct node *expression_statement) {
+  assert(NULL != expression_statement);
+  assert(NODE_EXPRESSION_STATEMENT == expression_statement->kind);
+
+  node_print_expression(output, expression_statement->data.expression_statement.expression);
+  fputs(";\n", output);
+}
+
+void node_print_function_call(FILE *output, struct node *call) {
+  node_print_expression(output, call->data.function_call.expression);
+  fputs("(", output);
+  node_print_expression(output, call->data.function_call.args);
+  fputs(")", output);
 }
 /*
  * After the symbol table pass, we can print out the symbol address
@@ -523,14 +740,20 @@ void node_print_identifier(FILE *output, struct node *identifier) {
   assert(NULL != identifier);
   assert(NODE_IDENTIFIER == identifier->kind);
   fputs(identifier->data.identifier.name, output);
-  fprintf(output, "$%lx", (unsigned long)identifier->data.identifier.symbol);
+  /* fprintf(output, "$%lx", (unsigned long)identifier->data.identifier.symbol); */
 }
 
 void node_print_expression(FILE *output, struct node *expression) {
   assert(NULL != expression);
   switch (expression->kind) {
+    case NODE_UNARY_OPERATION:
+      node_print_unary_operation(output, expression);
+      break;
     case NODE_BINARY_OPERATION:
       node_print_binary_operation(output, expression);
+      break;
+    case NODE_TERNARY_OPERATION:
+      node_print_ternary_operation(output, expression);
       break;
     case NODE_IDENTIFIER:
       node_print_identifier(output, expression);
@@ -542,21 +765,90 @@ void node_print_expression(FILE *output, struct node *expression) {
       node_print_type(output, expression);
       break;
     case NODE_COMMA_LIST:
-      node_print_comma_list(output, expression);
+      node_print_comma_list(output, expression, 0);
       break;  
+    case NODE_CAST:
+      node_print_cast(output, expression);
+      break;
+    case NODE_TYPE_NAME:
+      node_print_type_name(output, expression);
+      break;
+    case NODE_POINTER_DECLARATOR:
+      node_print_pointer_declarator(output, expression);
+      break;
+    case NODE_FUNCTION_DECLARATOR:
+      node_print_function_declarator(output, expression);
+      break;
+    case NODE_ARRAY_DECLARATOR:
+      node_print_array_declarator(output, expression);
+      break;
+    case NODE_PARAMETER_DECL:
+      node_print_parameter_decl(output, expression);
+      break;
+    case NODE_POINTERS:
+      ;
+      int parens;
+      parens = node_print_pointer_list(output, expression);
+      int i;
+      for(i = 0; i < parens; i++) {
+        fputs(")", output);
+      }
+      break;
+    case NODE_DIR_ABST_DEC:
+      node_print_dir_abst_dec(output, expression);
+      break;
+    case NODE_POSTFIX:
+      node_print_postfix(output, expression);
+      break;
+    case NODE_PREFIX:
+      node_print_prefix(output, expression);
+      break;
+    case NODE_FUNCTION_CALL:
+      node_print_function_call(output, expression);
+      break;
     default:
       assert(0);
       break;
   }
 }
 
-void node_print_expression_statement(FILE *output, struct node *expression_statement) {
-  assert(NULL != expression_statement);
-  assert(NODE_EXPRESSION_STATEMENT == expression_statement->kind);
-
-  node_print_expression(output, expression_statement->data.expression_statement.expression);
-
+void node_print_statement(FILE *output, struct node *statement) {
+  assert(NULL != statement);
+  switch (statement->kind) {
+    case NODE_LABELED_STATEMENT:
+      node_print_labeled_statement(output, statement);
+      break;
+    case NODE_COMPOUND:
+      node_print_compound(output, statement);
+      break;
+    case NODE_CONDITIONAL:
+      node_print_conditional(output, statement);
+      break;
+    case NODE_WHILE:
+      node_print_while(output, statement);
+      break;
+    case NODE_JUMP:
+      node_print_jump(output, statement);
+      break;
+    case NODE_SEMI_COLON:
+      node_print_semi_colon(output);
+      break;
+    case NODE_FUNCTION_DEFINITION:
+      node_print_function_definition(output, statement);
+      break;
+    case NODE_DECL:
+      node_print_decl(output, statement);
+      break;
+    case NODE_EXPRESSION_STATEMENT:
+      node_print_expression_statement(output, statement);
+      break;
+    default:
+      printf("%d\n",statement->kind);
+      assert(0);
+      break;
+  }
 }
+
 
 void node_print_statement_list(FILE *output, struct node *statement_list) {
   assert(NODE_STATEMENT_LIST == statement_list->kind);
@@ -564,17 +856,24 @@ void node_print_statement_list(FILE *output, struct node *statement_list) {
   if (NULL != statement_list->data.statement_list.init) {
     node_print_statement_list(output, statement_list->data.statement_list.init);
   }
-  node_print_expression_statement(output, statement_list->data.statement_list.statement);
-  fputs(";\n", output);
+  node_print_statement(output, statement_list->data.statement_list.statement);
 }
 
-void node_print_comma_list(FILE *output, struct node *comma_list) {
+void node_print_comma_list(FILE *output, struct node *comma_list, int print_comma) {
   assert(NODE_COMMA_LIST == comma_list->kind);
 
-  if (NULL != comma->data.comma_list.init) {
-    node_print_comma_list(output, comma_list->data.comma_list.first);
+  if (NULL != comma_list->data.comma_list.first) {
+    node_print_comma_list(output, comma_list->data.comma_list.first, 1);
   }
   node_print_expression(output, comma_list->data.comma_list.second);
-  fputs(", ", output);
+  if(print_comma == 1) fputs(", ", output);
 }
 
+void node_print_translation_unit(FILE *output, struct node *unit) {
+  assert(NODE_TRANSLATION_UNIT == unit->kind);
+
+  if (NULL != unit->data.translation_unit.decl) {
+    node_print_translation_unit(output, unit->data.translation_unit.decl);
+  }
+  node_print_statement(output, unit->data.translation_unit.more_decls);
+}

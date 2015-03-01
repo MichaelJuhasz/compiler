@@ -171,7 +171,7 @@ void ir_generate_for_simple_assignment(struct node *binary_operation) {
 
 void ir_generate_for_binary_operation(struct node *binary_operation) {
   assert(NODE_BINARY_OPERATION == binary_operation->kind);
-
+  /*
   switch (binary_operation->data.binary_operation.operation) {
     case BINOP_MULTIPLICATION:
       ir_generate_for_arithmetic_binary_operation(IR_MULTIPLY, binary_operation);
@@ -197,7 +197,9 @@ void ir_generate_for_binary_operation(struct node *binary_operation) {
       assert(0);
       break;
   }
+  */
 }
+
 
 void ir_generate_for_expression(struct node *expression) {
   switch (expression->kind) {

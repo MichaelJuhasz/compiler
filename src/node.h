@@ -26,7 +26,7 @@ struct type;
 #define NODE_DECL                           12
 #define NODE_POINTERS                       13
 #define NODE_POINTER_DECLARATOR             14
-#define NODE_FUCNTION_DECLARATOR            15
+#define NODE_FUNCTION_DECLARATOR            15
 #define NODE_ARRAY_DECLARATOR               16
 #define NODE_PARAMETER_DECL                 17
 #define NODE_TYPE_NAME                      18
@@ -34,6 +34,15 @@ struct type;
 #define NODE_COMPOUND                       20
 #define NODE_CONDITIONAL                    21
 #define NODE_OPERATOR                       22
+#define NODE_WHILE                          23
+#define NODE_FOR                            24
+#define NODE_JUMP                           25
+#define NODE_SEMI_COLON                     26
+#define NODE_FUNCTION_DEFINITION            27
+#define NODE_TRANSLATION_UNIT               28
+#define NODE_DIR_ABST_DEC                   29
+#define NODE_POSTFIX                        30
+#define NODE_PREFIX                         31
 
 struct result {
   struct type *type;
@@ -83,17 +92,12 @@ struct node {
     struct {
       struct node *expression;
       struct node *args;
-    } function_node;
+    } function_call;
 
     struct {
       struct node *first;
       struct node *second;
     } comma_list;
-
-    struct{
-      struct node *type;
-      struct node *cast;
-    } function_call;
 
     struct{
       struct node *log_expr;
@@ -160,6 +164,49 @@ struct node {
     } operation;
 
     struct {
+      struct node *expr;
+      struct node *statement;
+      int type;
+    } while_loop;
+
+    struct {
+      struct node *expr1;
+      struct node *expr2;
+      struct node *expr3;
+    } for_loop;
+
+    struct {
+      int type;
+      struct node *expr;
+    } jump;
+
+    struct {
+      struct node *type;
+      struct node *declarator;
+      struct node *compound;
+    } function_definition;
+
+    struct {
+      struct node *decl;
+      struct node *more_decls;
+    } translation_unit;
+
+    struct {
+      struct node *declarator;
+      struct node *expr;
+      int brackets;
+    } dir_abst_dec;
+
+    struct {
+      struct node *expr;
+      int op;
+    } postfix;
+    struct {
+      struct node *expr;
+      int op;
+    } prefix;
+
+    struct {
       struct node *expression;
     } expression_statement;
     struct {
@@ -220,6 +267,11 @@ struct node {
 #define TP_UNSIGNED                       5
 #define TP_SIGNED                         6
 
+/* Jump commands */
+#define JP_GOTO                           0
+#define JP_CONTINUE                       1
+#define JP_BREAK                          2
+#define JP_RETURN                         3
 
 /* Constructors */
 struct node *node_number(char *text);
@@ -249,9 +301,19 @@ struct node *node_labeled_statement(struct node *id, struct node *statement);
 struct node *node_compound(struct node *statement_list);
 struct node *node_conditional(struct node *expr, struct node *st1, struct node *st2);
 struct node *node_operator(int op);
+struct node *node_while(struct node *expr, struct node *statement, int type);
+struct node *node_for(struct node *expr1, struct node *expr2, struct node *expr3);
+struct node *node_jump(int type, struct node *expr);
+struct node *node_semi_colon();
+struct node *node_function_definition(struct node *type, struct node *declarator, struct node *compound);
+struct node *node_translation_unit(struct node *decl, struct node *more_decls);
+struct node *node_dir_abst_dec(struct node *declarator, struct node *expr, int brackets);
+struct node *node_postfix(int op, struct node *expr);
+struct node *node_prefix(int op, struct node *expr);
+
 
 struct result *node_get_result(struct node *expression);
 
 void node_print_statement_list(FILE *output, struct node *statement_list);
-
+void node_print_translation_unit(FILE *output, struct node *unit);
 #endif

@@ -20,7 +20,7 @@
   #include "node.h"
   #include "parser.h"
 
-  void warning(char *msg)
+  void warning(char *msg);
 
 %}
 /* Two start conditions have been added, as well as a number of 
@@ -206,6 +206,7 @@ while        return WHILE;
 <expString>\\'           *string_buf_ptr++ = '\''; 
 <expString>\\"           *string_buf_ptr++ = '"'; 
 <expString>\\?           *string_buf_ptr++ = '\?'; 
+<expString>\\0           *string_buf_ptr++ = '\0';
 <expString>{octalEscape} {
                             unsigned int i;
                             sscanf(yytext + 1,"%o",&i);
@@ -224,10 +225,7 @@ while        return WHILE;
 <expString>\" { 
                 BEGIN(INITIAL);
                 *string_buf_ptr = 0;
-                yytext = strdup(string_buf);
-                int len;
-                len = strlen(string_buf);
-                yylval = node_string(string_buf, len);
+                yylval = node_string(string_buf, string_buf - string_buf_ptr);
                 return STRING;
               }
   /* constants end */

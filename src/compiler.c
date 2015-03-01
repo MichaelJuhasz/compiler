@@ -11,6 +11,7 @@
 
 
 #define YYSTYPE struct node *
+#define YYDEBUG 1
 #include "scanner.h"
 #include "parser.h"
 
@@ -226,6 +227,8 @@ int main(int argc, char **argv) {
   char *stage;
   int opt;
 
+  /* yydebug = 1; */
+  
   output = NULL;
   stage = "mips";
   while (-1 != (opt = getopt(argc, argv, "o:s:"))) {
@@ -282,7 +285,7 @@ int main(int argc, char **argv) {
   }
   if (0 == strcmp("parser", stage)) {
     fprintf(stdout, "=============== PARSE TREE ===============\n");
-    node_print_statement_list(stdout, root_node);
+    node_print_translation_unit(stdout, root_node);
     return 0;
   }
 
