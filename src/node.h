@@ -1,3 +1,13 @@
+/*
+ * node.h
+ *
+ * This file contains code for building nodes to make a parse tree.
+ * It is based on skeleton code provided by CSCI-E95 and has been extended by: 
+ * Michael Juhasz
+ * March 1, 2015
+ *
+ */
+
 #ifndef _NODE_H
 #define _NODE_H
 
@@ -10,12 +20,12 @@ struct type;
 
 #define MAX_STR_LENGTH                     509
 
+/* Node type definitions, used to call print methods */
 #define NODE_NUMBER                          0
 #define NODE_IDENTIFIER                      1
 #define NODE_BINARY_OPERATION                2
 #define NODE_EXPRESSION_STATEMENT            3
 #define NODE_STATEMENT_LIST                  4
-/*added this one*/
 #define NODE_STRING                          5
 #define NODE_UNARY_OPERATION                 6
 #define NODE_FUNCTION_CALL                   7 
@@ -44,6 +54,8 @@ struct type;
 #define NODE_POSTFIX                        30
 #define NODE_PREFIX                         31
 
+
+/* node members specific to each type of node */
 struct result {
   struct type *type;
   struct ir_operand *ir_operand;
@@ -67,7 +79,7 @@ struct node {
     } identifier;
 
     struct {
-      char text[MAX_STR_LENGTH + 1];
+      char contents[MAX_STR_LENGTH + 1];
       int len;
     } string;
 
@@ -282,7 +294,7 @@ struct node *node_binary_operation(int operation, struct node *left_operand,
 struct node *node_expression_statement(struct node *expression);
 struct node *node_statement_list(struct node *init, struct node *statement);
 
-/*added this one*/
+/* These have all been added by me */
 struct node *node_string(char *text, int len);
 struct node *node_unary_operation(int operation, struct node *operand);
 struct node *node_function_call(struct node *expression, struct node *args);

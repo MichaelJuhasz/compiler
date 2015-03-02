@@ -1,3 +1,16 @@
+/**
+ *  parser.y
+ *  This file contains the specification for the bison generated parser
+ *  for the CSCI-E95 source language.  It is based off of skeleton code
+ *  provided by the same course and defines a complete grammar based on 
+ *  this language: http://sites.fas.harvard.edu/~libe295/spring2015/grammar.txt
+ *  The skeleton code has been extended by:
+ *  Michael Juhasz
+ *  March 1, 2015
+ */
+
+
+
 %verbose
 %debug
 
@@ -421,6 +434,8 @@ compound_statement
         { $$ = node_compound(NULL); }
   | LEFT_CURLY declaration_or_statement_list RIGHT_CURLY
         { $$ = node_compound($2); }
+  | error RIGHT_CURLY
+        { yyerrok; }
 ;
 
 declaration_or_statement_list
@@ -498,6 +513,8 @@ translation_unit
           { $$ = node_translation_unit(NULL, $1); }
   | translation_unit top_level_decl
           { $$ = node_translation_unit($1, $2); }
+  | error
+          { yyerrok; }
 ;
 
 top_level_decl

@@ -55,3 +55,6 @@ mips.o : mips.c mips.h ir.h type.h symbol.h node.h
 compiler.o : compiler.c mips.h ir.h type.h symbol.h node.h parser.h scanner.h
 compiler: compiler.o parser.o scanner.o node.o symbol.o type.o ir.o mips.o
 	$(CC) -o $@ $(LDFLAGS) $^ $(LDLIBS)
+
+test: 
+	compiler	./compiler -s scanner < test.c > test.txt

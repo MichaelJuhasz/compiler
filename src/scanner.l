@@ -124,6 +124,8 @@ badNum          {digit}+((\.{digit}+)|{digit}*[uUlLAa]+)
 
 \+\+         return PLUS_PLUS;
 
+\+\=         return PLUS_EQUAL;
+
 \/\=         return SLASH_EQUAL;
 
 \|\=         return VBAR_EQUAL;
@@ -225,7 +227,7 @@ while        return WHILE;
 <expString>\" { 
                 BEGIN(INITIAL);
                 *string_buf_ptr = 0;
-                yylval = node_string(string_buf, string_buf - string_buf_ptr);
+                yylval = node_string(string_buf, string_buf_ptr - string_buf);
                 return STRING;
               }
   /* constants end */

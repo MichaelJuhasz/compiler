@@ -1,3 +1,15 @@
+/*
+ * node.c
+ *
+ * This file contains code for building nodes to make a parse tree and 
+ * printing those nodes.  It is based on skeleton code provided by CSCI-E95 
+ * and has been extended by: 
+ * Michael Juhasz
+ * March 1, 2015
+ *
+ */
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -67,7 +79,13 @@ struct node *node_identifier(char *text, int length)
 struct node *node_string(char *text, int len)
 {
   struct node *node = node_create(NODE_STRING);
-  memcpy(node->data.string.text, text, len);
+  int i;
+  for(i = 0; i < len; i++)
+  {
+	  node->data.string.contents[i] = text[i];
+  }
+  node->data.string.contents[len] = '\0';
+  /* memcpy(node->data.string.text, text, len); */
   /*  strcpy(node->data.string.text, text); */
   node->data.string.len = len;
   return node;
@@ -148,7 +166,20 @@ struct node *node_number(char *text)
   return node;
 }
 
-/* MINE */
+/*
+ * node_unary_operation - allocate a node to represent a unary operation
+ *
+ * Parameters:
+ *   operation - int - contains a number representing an operator
+ *
+ *   operand - node - contains a node representing the subtree operand
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_unary_operation(int operation, struct node *operand)
 {
   struct node *node = node_create(NODE_UNARY_OPERATION);
@@ -159,6 +190,23 @@ struct node *node_unary_operation(int operation, struct node *operand)
   return node;
 }
 
+
+/*
+ * node_binary_operation - allocate a node to represent a binary operation
+ *
+ * Parameters:
+ *   operation - int - contains a number representing an operator
+ *
+ *   left_operand - node - contains a node representing a subtree operand
+ *
+ *   right_operand - node - contains a node representing a subtree operand
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_binary_operation(int operation, struct node *left_operand,
                                    struct node *right_operand)
 {
@@ -171,7 +219,22 @@ struct node *node_binary_operation(int operation, struct node *left_operand,
   return node;
 }
 
-/* MINE */
+/*
+ * node_ternary_operation - allocate a node to represent a ternary operation
+ *
+ * Parameters:
+ *   log_expr - node - contains a node representing a logical expression
+ *
+ *   expr - node - contains a node representing an expression
+ *
+ *   cond_expr - node - contains a node representing a conditional expression
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_ternary_operation(struct node *log_expr, struct node *expr, struct node *cond_expr)
 {
   struct node *node = node_create(NODE_TERNARY_OPERATION);
@@ -181,7 +244,20 @@ struct node *node_ternary_operation(struct node *log_expr, struct node *expr, st
   return node;
 }
 
-/* MINE */
+/*
+ * node_function_call - allocate a node to represent a function call
+ *
+ * Parameters:
+ *   expression - node - contains a node representing an expression
+ *
+ *   args - node - contains a node representing the passed arguments
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_function_call(struct node *expression, struct node *args)
 {
   struct node *node = node_create(NODE_FUNCTION_CALL);
@@ -190,7 +266,21 @@ struct node *node_function_call(struct node *expression, struct node *args)
   return node;
 }
 
-/* MINE */
+/*
+ * node_comma - allocate a node to represent a comma-separated list of 
+ * expressions.
+ *
+ * Parameters:
+ *   first - node - contains a node representing an expression or another list
+ *
+ *   second - node - contains a node representing an expression
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_comma_list(struct node *first, struct node *second)
 {
   struct node *node = node_create(NODE_COMMA_LIST);
@@ -199,7 +289,20 @@ struct node *node_comma_list(struct node *first, struct node *second)
   return node;
 }
 
-/* MINE */
+/*
+ * node_cast - allocate a node to represent a cast
+ *
+ * Parameters:
+ *   type - node - contains a node representing the type being cast to
+ *
+ *   cast - node - contains a node representing an expression
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_cast(struct node *type, struct node *cast)
 {
   struct node *node = node_create(NODE_CAST);
@@ -208,7 +311,20 @@ struct node *node_cast(struct node *type, struct node *cast)
   return node;
 }
 
-/* MINE */
+/*
+ * node_type - allocate a node to represent a data type
+ *
+ * Parameters:
+ *   sign - int - contains an int representing "signed" or "unsigned"
+ *
+ *   type - int - contains an int representing the data type
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_type(int sign, int type)
 {
   struct node *node = node_create(NODE_TYPE);
@@ -217,7 +333,21 @@ struct node *node_type(int sign, int type)
   return node;
 }
 
-/*MINE */
+/*
+ * node_decl - allocate a node to represent a decl
+ *
+ * Parameters:
+ *   type - node - contains a node representing a data type
+ *
+ *   init_decl_list - node - contains a node representing an
+ *   initionalized declaration list
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_decl(struct node *type, struct node *init_decl_list)
 {
   struct node *node = node_create(NODE_DECL);
@@ -226,9 +356,19 @@ struct node *node_decl(struct node *type, struct node *init_decl_list)
   return node;
 }
 
-/* MINE 
-* One additional ASTERISK needs to be added at the end
-*/
+/*
+ * node_pointers - allocate a node to represent a list of asterisks
+ *
+ * Parameters:
+ *   pointers - node - contains a node representing an asterisk, or a
+ *   list of asterisks
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_pointers(struct node *pointers)
 {
   struct node *node = node_create(NODE_POINTERS);
@@ -236,7 +376,20 @@ struct node *node_pointers(struct node *pointers)
   return node;
 }
 
-/* MINE */
+/*
+ * node_pointer_declarator - allocate a node to represent a pointer declarator
+ *
+ * Parameters:
+ *   pointer list - node - contains a node representing a list of asterisks
+ *
+ *   dir_dec - node - contains a node representing a direct declarator
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_pointer_declarator(struct node *pointer_list, struct node *dir_dec)
 {
   struct node *node = node_create(NODE_POINTER_DECLARATOR);
@@ -245,7 +398,21 @@ struct node *node_pointer_declarator(struct node *pointer_list, struct node *dir
   return node;
 }
 
-/* MINE */
+/*
+ * node_function_declarator - allocate a node to represent a function
+ * declarator
+ *
+ * Parameters:
+ *   dir_dec - node - contains a node representing a direct declarator
+ *
+ *   params - node - contatins a node representing a parameter list
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_function_declarator(struct node *dir_dec, struct node *params)
 {
   struct node *node = node_create(NODE_FUNCTION_DECLARATOR);
@@ -254,7 +421,21 @@ struct node *node_function_declarator(struct node *dir_dec, struct node *params)
   return node;
 }
 
-/* MINE */
+/*
+ * node_array_declarator - allocate a node to represent an array
+ * declarator
+ *
+ * Parameters:
+ *   dir_dec - node - contains a node representing a direct declarator
+ *
+ *   constant - node - contatins a node representing a constant expression
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_array_declarator(struct node *dir_dec, struct node *constant)
 {
   struct node *node = node_create(NODE_ARRAY_DECLARATOR);
@@ -263,7 +444,21 @@ struct node *node_array_declarator(struct node *dir_dec, struct node *constant)
   return node;
 }
 
-/* MINE */
+/*
+ * node_parameter_decl - allocate a node to represent a parameter decl
+ *
+ * Parameters:
+ *   type - node - contains a node representing a data type
+ *
+ *   declarator - node - contatins a node representing a declarator or 
+ *   abstract declarator
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_parameter_decl(struct node *type, struct node *declarator)
 {
   struct node *node = node_create(NODE_PARAMETER_DECL);
@@ -272,7 +467,20 @@ struct node *node_parameter_decl(struct node *type, struct node *declarator)
   return node;
 }
 
-/* MINE */
+/*
+ * node_type_name - allocate a node to represent a type name
+ *
+ * Parameters:
+ *   type - node - contains a node representing a data type
+ *
+ *   declarator - node - contatins a node representing an abstract declarator
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_type_name(struct node *type, struct node *declarator)
 {
   struct node *node = node_create(NODE_TYPE_NAME);
@@ -281,7 +489,20 @@ struct node *node_type_name(struct node *type, struct node *declarator)
   return node;
 }
 
-/* MINE */
+/*
+ * node_labeled_statement - allocate a node to represent a labeled statement
+ *
+ * Parameters:
+ *   id - node - contains a node representing an identifier 
+ *
+ *   statement - node - contatins a node representing a statement
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_labeled_statement(struct node *id, struct node *statement) {
   struct node *node = node_create(NODE_LABELED_STATEMENT);
   node->data.labeled_statement.id = id;
@@ -289,7 +510,20 @@ struct node *node_labeled_statement(struct node *id, struct node *statement) {
   return node;
 }
 
-/* MINE */
+/*
+ * node_compound - allocate a node to represent a compound statement
+ *
+ * Parameters:
+ *   statement_list - node - contains a node representing a list of 
+ *   statements
+ *
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_compound(struct node *statement_list)
 {
   struct node *node = node_create(NODE_COMPOUND);
@@ -297,7 +531,22 @@ struct node *node_compound(struct node *statement_list)
   return node;
 }
 
-/* MINE */
+/*
+ * node_conditional - allocate a node to represent a conditional statement
+ *
+ * Parameters:
+ *   expr - node - contains a node representing an expression
+ *
+ *   st1 - node - contatins a node representing a "then" statement
+ *
+ *   st2 - node - contatins a node representing an "else" statement
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_conditional(struct node *expr, struct node *st1, struct node *st2)
 {
   struct node *node = node_create(NODE_CONDITIONAL);
@@ -307,7 +556,19 @@ struct node *node_conditional(struct node *expr, struct node *st1, struct node *
   return node;
 }
 
-/* MINE */
+/*
+ * node_operator - allocate a node to represent an operator
+ *
+ * Parameters:
+ *   op - int - contains an int representing a unary or binary operator
+ *
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_operator(int op)
 {
   struct node *node = node_create(NODE_OPERATOR);
@@ -315,7 +576,22 @@ struct node *node_operator(int op)
   return node;
 }
 
-/* MINE */
+/*
+ * node_while - allocate a node to represent an iterative statement
+ *
+ * Parameters:
+ *   expr - node - contains a node representing an expression
+ *   
+ *   statement - node - contains a node representing a statement 
+ *
+ *   type - int - contatins an int representing "while," "do," or "for"
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_while(struct node *expr, struct node *statement, int type)
 {
   struct node *node = node_create(NODE_WHILE);
@@ -325,7 +601,22 @@ struct node *node_while(struct node *expr, struct node *statement, int type)
   return node;
 }
 
-/* MINE */
+/*
+ * node_for - allocate a node to represent a for loop
+ *
+ * Parameters:
+ *   expr1 - node - contains a node representing the initialization
+ *
+ *   expr2 - node - contains a node representing the condition 
+ *
+ *   expr3 - node - contains a node representing the afterthought
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_for(struct node *expr1, struct node *expr2, struct node *expr3)
 {
   struct node *node = node_create(NODE_FOR);
@@ -335,7 +626,20 @@ struct node *node_for(struct node *expr1, struct node *expr2, struct node *expr3
   return node;
 }
 
-/* MINE */
+/*
+ * node_jump - allocate a node to represent a jump statement
+ *
+ * Parameters:
+ *   type - int - contains a node representing the type of jump
+ *
+ *   expr - node - contains a node representing an expression
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_jump(int type, struct node *expr)
 {
   struct node *node = node_create(NODE_JUMP);
@@ -344,14 +648,37 @@ struct node *node_jump(int type, struct node *expr)
   return node;
 } 
 
-/* MINE - This is by far the most important node type*/
+/*
+ * node_semi_colon - allocate a node to represent a semicolon
+ *
+ * Returns a node containing a semicolon...
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_semi_colon()
 {
   struct node *node = node_create(NODE_SEMI_COLON);
   return node;
 }
 
-/* MINE */
+/*
+ * node_function_definition - allocate a node to represent a function definition
+ *
+ * Parameters:
+ *   type - node - contains a node representing a data type
+ *
+ *   declarator - node - contains a node representing a declarator
+ *
+ *   compound - node - contains a node representing a compound statement
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_function_definition(struct node *type, struct node *declarator, struct node *compound)
 {
   struct node *node = node_create(NODE_FUNCTION_DEFINITION);
@@ -360,8 +687,21 @@ struct node *node_function_definition(struct node *type, struct node *declarator
   node->data.function_definition.compound = compound;
   return node;
 }
-
-/* MINE */
+/*
+ * node_translation_unit - allocate a node to represent the whole program
+ *
+ * Parameters:
+ *   decl - node - contains a node representing a declaration or function
+ *    definition
+ *
+ *   more_decls - node - contains a node representing a list of the above 
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_translation_unit(struct node *decl, struct node *more_decls)
 {
   struct node *node = node_create(NODE_TRANSLATION_UNIT);
@@ -370,7 +710,22 @@ struct node *node_translation_unit(struct node *decl, struct node *more_decls)
   return node;
 }
 
-/* MINE */
+/*
+ * node_dir_abst_dec - allocate a node to represent a direct abstract declarator
+ *
+ * Parameters:
+ *   declarator - node - contains a node representing a declarator
+ *
+ *   expr - node - contains a node representing an expression 
+ *
+ *   brackets - int - contains an int indicating the presence of brackets
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_dir_abst_dec(struct node *declarator, struct node *expr, int brackets)
 {
   struct node *node = node_create(NODE_DIR_ABST_DEC);
@@ -380,6 +735,20 @@ struct node *node_dir_abst_dec(struct node *declarator, struct node *expr, int b
   return node;
 }
 
+/*
+ * node_postfix - allocate a node to represent a postincrement or decrement
+ *
+ * Parameters:
+ *   op - int - contains an int representing a ++ or --
+ *
+ *   expr - node - contains a node representing an expression
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_postfix(int op, struct node *expr)
 {
   struct node *node = node_create(NODE_POSTFIX);
@@ -388,6 +757,20 @@ struct node *node_postfix(int op, struct node *expr)
   return node;
 }
 
+/*
+ * node_prefix - allocate a node to represent a pretincrement or decrement
+ *
+ * Parameters:
+ *   op - int - contains an int representing a ++ or --
+ *
+ *   expr - node - contains a node representing an expression
+ *
+ * Returns a node containing the above.
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 struct node *node_prefix(int op, struct node *expr)
 {
   struct node *node = node_create(NODE_PREFIX);
@@ -428,7 +811,15 @@ struct result *node_get_result(struct node *expression) {
  * PARSE TREE PRETTY PRINTER FUNCTIONS *
  ***************************************/
 
+ /*
+ * These functions all function (har-de-har) similarly: recursively 
+ * calling a more specific print function, the expression, or statement print
+ * functions, which switch between the specific types, or actually using 
+ * fputs/c to print terminals contained in, or implicit to node types.  
+ */
+
 void node_print_expression(FILE *output, struct node *expression);
+void node_print_statement(FILE *output, struct node *statement);
 
 void node_print_ternary_operation(FILE *output, struct node *ternary_operation) {
   node_print_expression(output, ternary_operation->data.ternary_operation.log_expr);
@@ -594,7 +985,7 @@ void node_print_compound(FILE *output, struct node *statement_list) {
   {
     node_print_statement_list(output, statement_list->data.compound.statement_list);
   }
-  fputs("\n}\n", output);
+  fputs("}\n", output);
 }
 
 void node_print_conditional(FILE *output, struct node *conditional) {
@@ -633,6 +1024,7 @@ void node_print_while(FILE *output, struct node *while_loop) {
     case 1:
       fputs("do ", output);
       node_print_statement(output, while_loop->data.while_loop.statement);
+      fputs("while (", output);
       fputs("(", output);
       node_print_expression(output, while_loop->data.while_loop.expr);
       fputs(");\n", output);
@@ -650,8 +1042,9 @@ void node_print_while(FILE *output, struct node *while_loop) {
 void node_print_jump(FILE *output, struct node *jump_node) {
   switch (jump_node->data.jump.type) {
     case 0:
-      fputs("goto ", output);
+      fputs("goto(", output);
       node_print_expression(output, jump_node->data.jump.expr);
+      fputs(")", output);
       fputs(";\n", output);
       break;
     case 1: 
@@ -663,7 +1056,11 @@ void node_print_jump(FILE *output, struct node *jump_node) {
     case 3:
       fputs("return", output);
       if (jump_node->data.jump.expr != NULL)
+      {  
+        fputs("(", output);
         node_print_expression(output, jump_node->data.jump.expr);
+        fputs(")", output);
+      }
       fputs(";\n", output);
       break;
     default:
@@ -678,14 +1075,24 @@ void node_print_semi_colon(FILE *output) {
 
 void node_print_function_definition(FILE *output, struct node *function) {
   if (function->data.function_definition.type != NULL)
+  {
     node_print_expression(output, function->data.function_definition.type);
-  node_print_expression(output, function->data.function_definition.declarator);
+    fputs("(", output);
+    node_print_expression(output, function->data.function_definition.declarator);
+    fputs(")", output);
+  }
+  else 
+  {
+    node_print_expression(output, function->data.function_definition.declarator);
+  }
   node_print_statement(output, function->data.function_definition.compound);
 }
 
 void node_print_parameter_decl(FILE *output, struct node *param) {
   node_print_expression(output, param->data.parameter_decl.type);
+  fputs("(", output);  
   node_print_expression(output, param->data.parameter_decl.declarator);
+  fputs(")", output);
 }
 
 void node_print_type_name(FILE *output, struct node *type) {
@@ -695,7 +1102,9 @@ void node_print_type_name(FILE *output, struct node *type) {
 
 void node_print_decl(FILE *output, struct node *decl) {
   node_print_expression(output, decl->data.decl.type);
+  fputs("(", output);
   node_print_expression(output, decl->data.decl.init_decl_list);
+  fputs(")", output);
   fputs(";\n", output);
 }
 
@@ -728,9 +1137,42 @@ void node_print_expression_statement(FILE *output, struct node *expression_state
 void node_print_function_call(FILE *output, struct node *call) {
   node_print_expression(output, call->data.function_call.expression);
   fputs("(", output);
-  node_print_expression(output, call->data.function_call.args);
+  if (call->data.function_call.args != NULL)
+    node_print_expression(output, call->data.function_call.args);
   fputs(")", output);
 }
+
+void node_print_string(FILE *output, struct node *string) {
+  assert(NULL != string);
+  assert(NODE_STRING == string->kind);
+  fputs("\"", output);
+  int i;
+  for (i = 0; i < string->data.string.len; i++)
+  {
+    fputc(string->data.string.contents[i], output);
+  }
+  fputs("\"", output);
+}
+
+void node_print_statement_list(FILE *output, struct node *statement_list) {
+  assert(NODE_STATEMENT_LIST == statement_list->kind);
+
+  if (NULL != statement_list->data.statement_list.init) {
+    node_print_statement_list(output, statement_list->data.statement_list.init);
+  }
+  node_print_statement(output, statement_list->data.statement_list.statement);
+}
+
+void node_print_comma_list(FILE *output, struct node *comma_list, int print_comma) {
+  assert(NODE_COMMA_LIST == comma_list->kind);
+
+  if (NULL != comma_list->data.comma_list.first) {
+    node_print_comma_list(output, comma_list->data.comma_list.first, 1);
+  }
+  node_print_expression(output, comma_list->data.comma_list.second);
+  if(print_comma == 1) fputs(", ", output);
+}
+
 /*
  * After the symbol table pass, we can print out the symbol address
  * for each identifier, so that we can compare instances of the same
@@ -760,6 +1202,9 @@ void node_print_expression(FILE *output, struct node *expression) {
       break;
     case NODE_NUMBER:
       node_print_number(output, expression);
+      break;
+    case NODE_STRING:
+      node_print_string(output, expression);
       break;
     case NODE_TYPE:
       node_print_type(output, expression);
@@ -849,25 +1294,6 @@ void node_print_statement(FILE *output, struct node *statement) {
   }
 }
 
-
-void node_print_statement_list(FILE *output, struct node *statement_list) {
-  assert(NODE_STATEMENT_LIST == statement_list->kind);
-
-  if (NULL != statement_list->data.statement_list.init) {
-    node_print_statement_list(output, statement_list->data.statement_list.init);
-  }
-  node_print_statement(output, statement_list->data.statement_list.statement);
-}
-
-void node_print_comma_list(FILE *output, struct node *comma_list, int print_comma) {
-  assert(NODE_COMMA_LIST == comma_list->kind);
-
-  if (NULL != comma_list->data.comma_list.first) {
-    node_print_comma_list(output, comma_list->data.comma_list.first, 1);
-  }
-  node_print_expression(output, comma_list->data.comma_list.second);
-  if(print_comma == 1) fputs(", ", output);
-}
 
 void node_print_translation_unit(FILE *output, struct node *unit) {
   assert(NODE_TRANSLATION_UNIT == unit->kind);

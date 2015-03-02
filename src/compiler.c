@@ -208,7 +208,7 @@ int scan_only(FILE *output) {
     } 
     else if (0 == strcmp("string", token_type))
     {
-      fprintf(output, "   length = %-5d   value = %-10s\n", yylval->data.string.len, yylval->data.string.text);
+      fprintf(output, "   length = %-5d   value = %-10s\n", yylval->data.string.len, yylval->data.string.contents);
     }
 
     else {
