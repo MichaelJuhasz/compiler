@@ -1,22 +1,21 @@
 CC = gcc
+
 CFLAGS += -g -Wall -Wextra -pedantic
 
-CXX = g++
-CXXFLAGS +=
-
 LEX = flex
-LEXFLAGS += --header-file=scanner.h
 
-BISON = bison
-BISONFLAGS += -d --verbose
+LFLAGS += --header-file=scanner.h
 
-# Flags passed to the preprocessor.
-CPPFLAGS += -I$(GTEST_DIR)/include
+YACC = bison
 
-# Flags passed to the C++ compiler.
-CXXFLAGS += -g -Wall -Wextra
+YFLAGS += -d
+
+%.c : %.y
+
+	$(YACC) $(YFLAGS) -o $@ $<
 
 LDLIBS += -lfl -ly
+
 LDFLAGS =
 
 EXECS = compiler
@@ -26,13 +25,8 @@ EXECS = compiler
 all : $(EXECS)
 
 clean :
-	rm -f $(EXECS) *.o scanner.c parser.c parser.h
 
-%.c : %.l
-	$(LEX) $(LEXFLAGS) -o $@ $<
-
-%.c : %.y
-	$(BISON) $(BISONFLAGS) -o $@ $<
+	rm -f $(EXECS) *.o scanner.c scanner.h parser.c parser.h
 
 scanner.h : scanner.c
 
@@ -53,8 +47,15 @@ ir.o : ir.c ir.h type.h symbol.h node.h
 mips.o : mips.c mips.h ir.h type.h symbol.h node.h
 
 compiler.o : compiler.c mips.h ir.h type.h symbol.h node.h parser.h scanner.h
+
 compiler: compiler.o parser.o scanner.o node.o symbol.o type.o ir.o mips.o
+
 	$(CC) -o $@ $(LDFLAGS) $^ $(LDLIBS)
 
-test: 
-	compiler	./compiler -s scanner < test.c > test.txt
+parser: compiler
+
+	./compiler -s parser < test2.c
+
+errorTest:
+
+	./compiler -s parser < errorTest.c

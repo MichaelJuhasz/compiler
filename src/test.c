@@ -1,67 +1,46 @@
-/**
- * Test file for lex scanner.
- * This comment should be ignored, though the lines should be counted.
- */
+int read_int();
+void read_string(char *s, int n);
+void print_int(int i);
+void print_string(char *s);
+int atoi(char *s);
+void strcpy(char *dest, char *src);
+void print_int_hex(int i);
 
-"Here is a list of operators"
-! % ^ & * - + = 
-~ | < > / ? += -=
-*= /= %= <<= >>= &=
-^= |= ++ -- << >>
-<= >= == != && ||
-( ) [ ] { } , ; :
+char caesar_char(char c, int shift) {
+  int base;
+  if ('A' <= c && 'Z' >= c) {
+    base = 'A';
+  } else if ('a' <= c && 'z' >= c) {
+    base = 'a';
+  } else {
+    base = 0;
+  }
 
-"Here are the reserved words"
-break char continue do else
-for goto if int long return 
-short signed unsigned void 
-while
+  if (base > 0) {
+    c -= base;
+    c += shift;
+    c %= 26;
+    c += base;
+  }
 
-"A few extra graphical characters"
-@ $ `
+  return c;
+}
 
-"Escape codes work"
+int main(int argc, char *argv[]) {
+  char string[100];
+  int shift, i;
 
-'\a' '\b' '\n' '\t' '\v' '\r' '\f'
+  strcpy(string, argv[1]);
+  shift = atoi(argv[2]);
 
-"\\ \' \" \?"
+  i = 0;
+  while (string[i]) {
+    string[i] = caesar_char(string[i], shift);
+    i++;
+  }
 
-"Even octal escapes, like \164\150\151\163\41"
-
-"Number constants work like this:"
-1 2 34 567 8910 11121314
-
-"Identifiers catch a lot"
-
-these are all identifiers 
-
-so_is_this _andT4is 
-
-"These are errors"
-
-1.3
-30000000L
-5u
-012
-0xf6
-
-'bad'
-
-'o
-
-'\089'
-
-"unclosed 
-
-
-int someFunction (char *s, int len)
-{
-    if (len <= 1) 
-      return 1;
-    if (s[0] != s[len - 1])
-      return 0;
-    else return someFunction(++s, len - 1);
-} 
-
-int main(int argc, char **argv) 
-{
+  print_string("Shifted string: ");
+  print_string(string);
+  print_string("\\n");
+  return 0;
+}

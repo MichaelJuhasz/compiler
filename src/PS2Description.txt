@@ -1,0 +1,6 @@
+PS2 Description
+Michael Juhasz
+
+This application uses Bison to parse C89-like code.  "Make parser" will run a test file through the parser, generating a parse tree, then printing the contents of the tree in a "readable" format.  
+
+If "make errorTest" is executed, the parser will attempt to parse an error-ridden file, demonstrating that, as opposed to Bison's default behavior, my parser will continue parsing after an error.  The parse tree will not be printed, since it's unlikely that a valid tree could be generated after an error has been detected.  However, the parser does its best to recover and continue parsing correctly, which can be seen if Bison's trace facilities are activated.  
