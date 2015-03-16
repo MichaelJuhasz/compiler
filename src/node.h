@@ -107,8 +107,8 @@ struct node {
     } function_call;
 
     struct {
-      struct node *first;
-      struct node *second;
+      struct node *next;
+      struct node *data;
     } comma_list;
 
     struct{
@@ -128,7 +128,7 @@ struct node {
     } decl;
 
     struct {
-      struct node *pointers;
+      struct node *next;
     } pointers;
 
     struct {
@@ -298,12 +298,12 @@ struct node *node_statement_list(struct node *init, struct node *statement);
 struct node *node_string(char *text, int len);
 struct node *node_unary_operation(int operation, struct node *operand);
 struct node *node_function_call(struct node *expression, struct node *args);
-struct node *node_comma_list(struct node *first, struct node *second);
+struct node *node_comma_list(struct node *next, struct node *data);
 struct node *node_cast(struct node *type, struct node *cast);
 struct node *node_type(int sign, int type);
 struct node *node_ternary_operation(struct node *log_expr, struct node *expr, struct node * cond_expr);
 struct node *node_decl(struct node *type, struct node *init_decl_list);
-struct node *node_pointers(struct node *pointers);
+struct node *node_pointers(struct node *next);
 struct node *node_pointer_declarator(struct node *pointer_list, struct node *dir_dec);
 struct node *node_function_declarator(struct node *dir_dec, struct node *params);
 struct node *node_array_declarator(struct node *dir_dec, struct node *constant);

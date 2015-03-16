@@ -271,9 +271,9 @@ struct node *node_function_call(struct node *expression, struct node *args)
  * expressions.
  *
  * Parameters:
- *   first - node - contains a node representing an expression or another list
+ *   next - node - contains a node representing an expression or another list
  *
- *   second - node - contains a node representing an expression
+ *   data - node - contains a node representing an expression
  *
  * Returns a node containing the above.
  *
@@ -281,11 +281,11 @@ struct node *node_function_call(struct node *expression, struct node *args)
  *   Memory may be allocated on the heap.
  *
  */
-struct node *node_comma_list(struct node *first, struct node *second)
+struct node *node_comma_list(struct node *next, struct node *data)
 {
   struct node *node = node_create(NODE_COMMA_LIST);
-  node->data.comma_list.first = first;
-  node->data.comma_list.second = second;
+  node->data.comma_list.next = next;
+  node->data.comma_list.data = data;
   return node;
 }
 
@@ -372,7 +372,7 @@ struct node *node_decl(struct node *type, struct node *init_decl_list)
 struct node *node_pointers(struct node *pointers)
 {
   struct node *node = node_create(NODE_POINTERS);
-  node->data.pointers.pointers = pointers;
+  node->data.pointers.next = pointers;
   return node;
 }
 
@@ -948,8 +948,8 @@ void node_print_labeled_statement(FILE *output, struct node *label) {
 
 int node_print_pointer_list(FILE *output, struct node *pointers) {
   fputs("(*", output);
-  if (pointers->data.pointers.pointers != NULL)
-    return 1 + node_print_pointer_list(output, pointers->data.pointers.pointers);
+  if (pointers->data.pointers.next != NULL)
+    return 1 + node_print_pointer_list(output, pointers->data.pointers.next);
   else return 1;
 }
 void node_print_pointer_declarator(FILE *output, struct node *pointer_declarator) {
@@ -967,6 +967,7 @@ void node_print_function_declarator(FILE *output, struct node *function) {
   fputs("(", output);
   if (function->data.function_declarator.params != NULL)
     node_print_expression(output, function->data.function_declarator.params);
+  else fputs("void", output);
   fputs(")", output);
 }
 
@@ -1074,17 +1075,11 @@ void node_print_semi_colon(FILE *output) {
 }
 
 void node_print_function_definition(FILE *output, struct node *function) {
-  if (function->data.function_definition.type != NULL)
-  {
-    node_print_expression(output, function->data.function_definition.type);
-    fputs("(", output);
-    node_print_expression(output, function->data.function_definition.declarator);
-    fputs(")", output);
-  }
-  else 
-  {
-    node_print_expression(output, function->data.function_definition.declarator);
-  }
+  node_print_expression(output, function->data.function_definition.type);
+  fputs("(", output);
+  node_print_expression(output, function->data.function_definition.declarator);
+  fputs(")", output);
+
   node_print_statement(output, function->data.function_definition.compound);
 }
 
@@ -1166,10 +1161,10 @@ void node_print_statement_list(FILE *output, struct node *statement_list) {
 void node_print_comma_list(FILE *output, struct node *comma_list, int print_comma) {
   assert(NODE_COMMA_LIST == comma_list->kind);
 
-  if (NULL != comma_list->data.comma_list.first) {
-    node_print_comma_list(output, comma_list->data.comma_list.first, 1);
+  if (NULL != comma_list->data.comma_list.next) {
+    node_print_comma_list(output, comma_list->data.comma_list.next, 1);
   }
-  node_print_expression(output, comma_list->data.comma_list.second);
+  node_print_expression(output, comma_list->data.comma_list.data);
   if(print_comma == 1) fputs(", ", output);
 }
 

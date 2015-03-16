@@ -290,16 +290,16 @@ int main(int argc, char **argv) {
   }
 
   symbol_initialize_table(&symbol_table);
-  symbol_add_from_statement_list(&symbol_table, root_node);
+  symbol_add_from_translation_unit(&symbol_table, root_node);
   if (symbol_table_num_errors > 0) {
     print_errors_from_pass(stdout, "Symbol table", symbol_table_num_errors);
     return 3;
   }
   fprintf(stdout, "================= SYMBOLS ================\n");
-  symbol_print_table(stdout, &symbol_table);
+  symbol_print_table(stdout, &symbol_table, 0);
   if (0 == strcmp("symbol", stage)) {
     fprintf(stdout, "=============== PARSE TREE ===============\n");
-    node_print_statement_list(stdout, root_node);
+    node_print_translation_unit(stdout, root_node);
     return 0;
   }
 

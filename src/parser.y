@@ -356,7 +356,7 @@ direct_declarator
 function_declarator
   : direct_declarator LEFT_PAREN parameter_list RIGHT_PAREN
         { $$ = node_function_declarator($1, $3); }
-  | direct_declarator LEFT_PAREN RIGHT_PAREN
+  | direct_declarator LEFT_PAREN VOID RIGHT_PAREN
         { $$ = node_function_declarator($1, NULL); }
 ;
 
@@ -455,6 +455,8 @@ conditional_statement
           { $$ = node_conditional($3, $5, NULL); }
   | IF LEFT_PAREN expr RIGHT_PAREN statement ELSE statement
           { $$ = node_conditional($3, $5, $7); }
+  | IF LEFT_PAREN error RIGHT_PAREN 
+          { yyerrok; }
 ;
 
 iterative_statement
@@ -523,31 +525,14 @@ top_level_decl
 ;
 
 function_definition
-  : declaration_specifiers declarator compound_statement
+  : declaration_specifiers function_declarator compound_statement
         { $$ = node_function_definition($1, $2, $3); }
-  | declarator compound_statement
-        { $$ = node_function_definition(NULL, $1, $2); }
 ;
 
 program
   : translation_unit
           { root_node = $1; }
 ;
-
-/* 
-statement
-  : expr SEMICOLON
-          { $$ = node_expression_statement($1); }
-;
-
-
-statement_list
-  : statement
-          { $$ = node_statement_list(NULL, $1); }
-  | statement_list statement
-          { $$ = node_statement_list($1, $2); }
-;
-*/
 
 %%
 
