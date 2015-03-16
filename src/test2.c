@@ -1,4 +1,4 @@
-int read_int();
+int read_int(void);
 void read_string(char *s, int n);
 void print_int(int i);
 void print_string(char *s);
@@ -114,13 +114,12 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
-additionalJunk() {
-  emptyFunctionCall();
+void additionalJunk(int i) {
   do {
     i++;
   }
   while (i < 42);
   while(i > 0) { }
-  i = (int(*([])))b;
-  b = ******ppppppi;  
+  i = (int(*([])))i;
+  int ******ppppppi;  
 }

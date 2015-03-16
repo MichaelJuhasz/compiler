@@ -25,6 +25,22 @@ struct type {
       bool is_unsigned;
       int width;
     } basic;
+
+    struct {
+      struct type *type;
+    } pointer;
+
+    struct {
+      struct type *type;
+      int len;
+    } array;
+
+    struct {
+      struct type *return_type;
+      int num_params;
+      struct type **params;
+      int is_definition;
+    } func;
   } data;
 };
 

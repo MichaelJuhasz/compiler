@@ -1,0 +1,6 @@
+PS3 Description
+Michael Juhasz
+
+This application generates a symbol table from Bison parsed C-89-like code.  The AST created by Bison is walked and when identifiers are encountered they may be added to the symbol table.  After symbol table generation, each AST identifier node should have a pointer to the correct symbol on the correct symbol table.  Finally, the symbol tables are printed in a depth-first order.
+
+If "make errorTest" is executed, the symbol table generator will run through code that parses correctly, but for one reason or another (as identified by the error messages) will not add a symbol to the table.  "Make test" will run through a variety of valid code, create and print the symbol tables, then print the parse tree.   
