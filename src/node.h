@@ -113,6 +113,7 @@ struct node {
     struct {
       struct node *next;
       struct node *data;
+      struct result result;
     } comma_list;
 
     struct{

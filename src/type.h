@@ -45,6 +45,7 @@ struct type {
 };
 
 struct type *type_basic(bool is_unsigned, int width);
+struct type *type_void();
 
 int type_size(struct type *t);
 
@@ -53,7 +54,7 @@ int type_equal(struct type *left, struct type *right);
 int type_is_arithmetic(struct type *t);
 int type_is_unsigned(struct type *t);
 
-void type_assign_in_statement_list(struct node *statement_list);
+struct type *type_assign_in_statement_list(struct node *statement_list, struct type *return_type);
 
 void type_print(FILE *output, struct type *type);
 struct type *type_array(int size, struct type *type);

@@ -84,6 +84,13 @@ struct type *type_array(int size, struct type *type) {
   return array;
 }
 
+struct type *type_void() {
+	struct type *void_type;
+	void_type = malloc(sizeof(struct type));
+	void_type->kind = TYPE_VOID;
+	return void_type;
+}
+
 /****************************************
  * TYPE EXPRESSION INFO AND COMPARISONS *
  ****************************************/
@@ -208,7 +215,7 @@ int type_size(struct type *t) {
 int type_checking_num_errors;
 
 void type_assign_in_expression(struct node *expression);
-void type_assign_in_statement(struct node *statement);
+struct type *type_assign_in_statement(struct node *statement, struct type *return_type);
 //
 //struct node *type_implicit_cast(struct node *operand, int sign, int len) {
 //	struct node *cast_node = node_cast(node_type(sign, len), operand, NULL, 1);
@@ -289,6 +296,10 @@ void type_convert_usual_binary(struct node *binary_operation) {
 	  case OP_PLUS:
 		  binary_operation->data.binary_operation.result.type = type_pointer(node_get_result(binary_operation->data.binary_operation.right_operand)->type );
 		  break;
+	  case OP_AMPERSAND_AMPERSAND:
+	  case OP_VBAR_VBAR:
+		  binary_operation->data.binary_operation.result.type = type_basic(false, TYPE_WIDTH_INT);
+		  break;
 	  default:
 		  /* TODO ERROR */
 		  type_checking_num_errors++;
@@ -307,6 +318,10 @@ void type_convert_usual_binary(struct node *binary_operation) {
 	  case OP_MINUS:
 		  binary_operation->data.binary_operation.result.type = type_pointer(node_get_result(binary_operation->data.binary_operation.right_operand)->type );
 		  break;
+	  case OP_AMPERSAND_AMPERSAND:
+	  case OP_VBAR_VBAR:
+		  binary_operation->data.binary_operation.result.type = type_basic(false, TYPE_WIDTH_INT);
+		  break;
 	  default:
 		  /* TODO ERROR */
 		  type_checking_num_errors++;
@@ -318,6 +333,11 @@ void type_convert_usual_binary(struct node *binary_operation) {
   {
 	  if (binary_operation->data.binary_operation.operation == OP_MINUS)
 		  binary_operation->data.binary_operation.result.type = type_basic(false, TYPE_WIDTH_INT);
+	  else if(binary_operation->data.binary_operation.operation == OP_AMPERSAND_AMPERSAND ||
+			  binary_operation->data.binary_operation.operation == OP_VBAR_VBAR)
+	  {
+		  binary_operation->data.binary_operation.result.type = type_basic(false, TYPE_WIDTH_INT);
+	  }
 	  else
 	  {
 		  /* TODO ERROR - Cannot perform operation on pointers */
@@ -381,7 +401,7 @@ void type_convert_simple_assignment(struct node *binary_operation) {
 		  binary_operation->data.binary_operation.right_operand = cast_node;
 	  }
 
-	  else
+	  else if (right_type->kind != TYPE_BASIC)
 	  {
 		  /*TODO ERROR - must be arithmetic type */
 		  type_checking_num_errors++;
@@ -519,6 +539,8 @@ void type_assign_in_binary_operation(struct node *binary_operation) {
   type_assign_in_expression(binary_operation->data.binary_operation.left_operand);
   type_assign_in_expression(binary_operation->data.binary_operation.right_operand);
 
+  printf("\nBinary Operator number: %d\n", binary_operation->data.binary_operation.operation);
+
   switch (binary_operation->data.binary_operation.operation) {
     case OP_ASTERISK:
     case OP_SLASH:
@@ -530,6 +552,8 @@ void type_assign_in_binary_operation(struct node *binary_operation) {
     case OP_GREATER_GREATER:
     case OP_VBAR:
     case OP_CARET:
+    case OP_AMPERSAND_AMPERSAND:
+    case OP_VBAR_VBAR:
         type_convert_usual_binary(binary_operation);
         break;
 
@@ -570,11 +594,12 @@ void type_assign_in_ternary_operation(struct node *expression) {
 	type_assign_in_expression(expression->data.ternary_operation.expr);
 	type_assign_in_expression(expression->data.ternary_operation.cond_expr);
 
-	if(type_get_from_node(expression->data.ternary_operation.log_expr)->kind != TYPE_BASIC)
+	if(type_get_from_node(expression->data.ternary_operation.log_expr)->kind != TYPE_BASIC &&
+			type_get_from_node(expression->data.ternary_operation.log_expr)->kind != TYPE_POINTER)
 	{
 		/*TODO ERROR - Must evaluate to true or false */
 		  type_checking_num_errors++;
-		  printf("ERROR: line %d - Leftmost operand must evaluate to true or false.", expression->line_number);
+		  printf("ERROR: line %d - Leftmost operand must be scalar.", expression->line_number);
 	}
 
 	int left_kind;
@@ -689,6 +714,7 @@ void type_assign_in_comma_list(struct node *comma_list) {
 		  type_assign_in_comma_list(comma_list->data.comma_list.next);
 	  }
 	  type_assign_in_expression(comma_list->data.comma_list.data);
+	  comma_list->data.comma_list.result.type = type_get_from_node(comma_list->data.comma_list.data);
 }
 
 void type_assign_in_function_call(struct node *call) {
@@ -782,68 +808,85 @@ void type_assign_in_expression(struct node *expression) {
   }
 }
 
-void type_assign_in_expression_statement(struct node *expression_statement) {
+struct type *type_assign_in_expression_statement(struct node *expression_statement) {
   assert(NODE_EXPRESSION_STATEMENT == expression_statement->kind);
   type_assign_in_expression(expression_statement->data.expression_statement.expression);
+  return NULL;
 }
 
-void type_assign_in_statement_list(struct node *statement_list) {
+struct type *type_assign_in_statement_list(struct node *statement_list, struct type *return_type) {
   assert(NODE_STATEMENT_LIST == statement_list->kind);
+  struct type *type_list = NULL;
+  struct type *type = NULL;
   if (NULL != statement_list->data.statement_list.init) {
-    type_assign_in_statement_list(statement_list->data.statement_list.init);
+    type_list = type_assign_in_statement_list(statement_list->data.statement_list.init, return_type);
   }
-  type_assign_in_statement(statement_list->data.statement_list.statement);
+  type = type_assign_in_statement(statement_list->data.statement_list.statement, return_type);
+  if(type_list != NULL)
+	  return type_list;
+  else
+	  return type;
 }
 
-void type_assign_in_labeled_statement(struct node *statement) {
+struct type *type_assign_in_labeled_statement(struct node *statement, struct type *return_type) {
   assert(NODE_LABELED_STATEMENT == statement->kind);
-  type_assign_in_statement(statement->data.labeled_statement.statement);
+  return type_assign_in_statement(statement->data.labeled_statement.statement, return_type);
 }
 
-void type_assign_in_compound(struct node *statement) {
+struct type *type_assign_in_compound(struct node *statement, struct type *return_type) {
   assert(NODE_COMPOUND == statement->kind);
   if(statement->data.compound.statement_list != NULL)
   {
-    type_assign_in_statement_list(statement->data.compound.statement_list);
+    return type_assign_in_statement_list(statement->data.compound.statement_list, return_type);
   }
+  else return NULL;
 }
 
-void type_assign_in_conditional(struct node *conditional) {
+struct type *type_assign_in_conditional(struct node *conditional, struct type *return_type) {
+  struct type *if_type = NULL;
+  struct type *else_type = NULL;
   type_assign_in_expression(conditional->data.conditional.expr);
-  type_assign_in_statement(conditional->data.conditional.then_statement);
+  if_type = type_assign_in_statement(conditional->data.conditional.then_statement, return_type);
   if(conditional->data.conditional.else_statement != NULL)
   {
-	 type_assign_in_statement(conditional->data.conditional.else_statement);
+	  else_type = type_assign_in_statement(conditional->data.conditional.else_statement, return_type);
+	  if(if_type == NULL || if_type != else_type)
+		  return NULL;
+	  else
+		  return if_type;
   }
+  else
+	  return if_type;
 }
 
-void type_assign_in_for(struct node *for_node) {
+struct type *type_assign_in_for(struct node *for_node) {
   if(for_node->data.for_loop.expr1 != NULL)
     type_assign_in_expression(for_node->data.for_loop.expr1);
   if(for_node->data.for_loop.expr2 != NULL)
     type_assign_in_expression(for_node->data.for_loop.expr2);
   if(for_node->data.for_loop.expr3 != NULL)
     type_assign_in_expression(for_node->data.for_loop.expr3);
+  return NULL;
 }
 
-void type_assign_in_while(struct node *while_loop) {
+struct type *type_assign_in_while(struct node *while_loop, struct type *return_type) {
 	assert(NODE_WHILE == while_loop->kind);
 	switch (while_loop->data.while_loop.type) {
     case 0:
       type_assign_in_expression(while_loop->data.while_loop.expr);
-      type_assign_in_statement(while_loop->data.while_loop.statement);
-      break;
+      return type_assign_in_statement(while_loop->data.while_loop.statement, return_type);
     case 1:
-      type_assign_in_statement(while_loop->data.while_loop.statement);
-      type_assign_in_expression(while_loop->data.while_loop.expr);
-      break;
+    {
+        struct type *type = type_assign_in_statement(while_loop->data.while_loop.statement, return_type);
+        type_assign_in_expression(while_loop->data.while_loop.expr);
+        return type;
+    }
     case 2:
       type_assign_in_for(while_loop->data.while_loop.expr);
-      type_assign_in_statement(while_loop->data.while_loop.statement);
-      break;
+      return type_assign_in_statement(while_loop->data.while_loop.statement, return_type);
     default:   
       assert(0);
-      break;  
+      return NULL;
   }
 }
 
@@ -854,35 +897,88 @@ void type_assign_in_while(struct node *while_loop) {
  *       table - symbol_table 
  *       jump_node - node 
  */
-void type_assign_in_jump(struct node *jump_node) {
+struct type *type_assign_in_jump(struct node *jump_node, struct type *return_type) {
   assert(NODE_JUMP == jump_node->kind);
   switch (jump_node->data.jump.type) {
     /* GOTO */
     case 0: ;
-      break;
+      return NULL;
     /* CONTINUE */
     case 1:
-      break;
+      return NULL;
     /* BREAK */  
     case 2: 
-      break;
+      return NULL;
     /* RETURN */  
     case 3:
       if (jump_node->data.jump.expr != NULL)
-      {  
+      {
         type_assign_in_expression(jump_node->data.jump.expr);
+        struct type *returned_type = type_get_from_node(jump_node->data.jump.expr);
+    	if (return_type->kind == TYPE_VOID)
+    	{
+    		type_checking_num_errors++;
+    		printf("ERROR: line %d - Return type mismatch", jump_node->line_number);
+    	}
+    	else
+    	{
+    		if(jump_node->data.jump.expr->kind == NODE_NUMBER &&
+    				jump_node->data.jump.expr->data.number.value == 0)
+    		{
+    			/*everything's ok*/
+    		}
+
+    		else if(return_type->kind == TYPE_BASIC)
+    		{
+    			  if(returned_type->kind == TYPE_BASIC && !type_is_equal(return_type, returned_type))
+    			  {
+    				  struct node *cast_node = node_cast(return_type, jump_node->data.jump.expr, NULL, 1);
+    				  jump_node->data.jump.expr = cast_node;
+    			  }
+
+    			  else if (returned_type->kind != TYPE_BASIC)
+    			  {
+    				  /*TODO ERROR - must be arithmetic type */
+    				  type_checking_num_errors++;
+    				  printf("ERROR: line %d - Return type mismatch.", jump_node->line_number);
+    			  }
+    		  }
+
+    		  if(return_type->kind == TYPE_POINTER)
+    		  {
+    			  if (!type_is_compatible(return_type, returned_type))
+    			  {
+    				  /* TODO ERROR - Incompatible pointer types. */
+    				  type_checking_num_errors++;
+    				  printf("ERROR: line %d - Incompatible pointer types.", jump_node->line_number);
+    			  }
+    		  }
+
+    	  }
+    	  return returned_type;
       }
-      break;
+      return NULL;
     default:
       assert(0);
-      break;
+      return NULL;
   }
 }
 
-void stype_assign_in_function_definition(struct node *func) {
+struct type *stype_assign_in_function_definition(struct node *func) {
 	assert(NODE_FUNCTION_DEFINITION == func->kind);
 	type_assign_in_expression(func->data.function_definition.declarator);
-	type_assign_in_statement(func->data.function_definition.compound);
+	struct type *return_type = node_get_type(func->data.function_definition.type);
+	struct type *returned_type = type_assign_in_statement(func->data.function_definition.compound, return_type);
+
+	if(return_type->kind != TYPE_VOID)
+	{
+		if(returned_type == NULL)
+		{
+			type_checking_num_errors++;
+			printf("ERROR: line %d - Return type not supplied in function definition.", func->line_number);
+		}
+	}
+	return NULL;
 }
 
 
@@ -892,38 +988,40 @@ void stype_assign_in_function_definition(struct node *func) {
  *        statement - node - a node containing the statement 
  *
  */
-void type_assign_in_statement(struct node *statement) {
+struct type *type_assign_in_statement(struct node *statement, struct type *return_type) {
   assert(NULL != statement);
   switch (statement->kind) {
     case NODE_LABELED_STATEMENT:
-      type_assign_in_labeled_statement(statement);
-      break;
+       return type_assign_in_labeled_statement(statement, return_type);
+       break;
     case NODE_COMPOUND:
-      type_assign_in_compound(statement);
+      return type_assign_in_compound(statement, return_type);
       break;
     case NODE_CONDITIONAL:
-      type_assign_in_conditional(statement);
+      return type_assign_in_conditional(statement, return_type);
       break;
     case NODE_WHILE:
-      type_assign_in_while(statement);
+      return type_assign_in_while(statement, return_type);
       break;
     case NODE_JUMP:
-      type_assign_in_jump(statement);
+      return type_assign_in_jump(statement, return_type);
       break;
     case NODE_SEMI_COLON:
+      return NULL;
       break;
     case NODE_FUNCTION_DEFINITION:
-      stype_assign_in_function_definition(statement);
+      return stype_assign_in_function_definition(statement);
       break;
     case NODE_DECL:
-      break;
+      return NULL;
+    	break;
     case NODE_EXPRESSION_STATEMENT:
-      type_assign_in_expression_statement(statement);
+      return type_assign_in_expression_statement(statement);
       break;
     default:
       printf("%d\n",statement->kind);
       assert(0);
-      break;
+      return NULL;
   }
 }
 
@@ -933,6 +1031,6 @@ void type_assign_in_translation_unit(struct node *translation_unit) {
 	if (NULL != translation_unit->data.translation_unit.decl) {
     	type_assign_in_translation_unit(translation_unit->data.translation_unit.decl);
   	}
-  	type_assign_in_statement(translation_unit->data.translation_unit.more_decls);
+  	type_assign_in_statement(translation_unit->data.translation_unit.more_decls, NULL);
 }
 

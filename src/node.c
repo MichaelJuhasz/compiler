@@ -813,8 +813,6 @@ struct result *node_get_result(struct node *expression) {
       return &expression->data.binary_operation.result;
     case NODE_TERNARY_OPERATION:
     	return &expression->data.ternary_operation.result;
-    case NODE_FUNCTION_CALL:
-      return node_get_result(expression->data.function_call.expression);
     case NODE_CAST:
       return &expression->data.cast.result;
     case NODE_UNARY_OPERATION:
@@ -823,6 +821,10 @@ struct result *node_get_result(struct node *expression) {
     	return &expression->data.postfix.result;
     case NODE_PREFIX:
     	return &expression->data.prefix.result;
+    case NODE_COMMA_LIST:
+    	return &expression->data.comma_list.result;
+    case NODE_FUNCTION_CALL:
+      return node_get_result(expression->data.function_call.expression);
     default:
       assert(0);
       return NULL;
@@ -867,7 +869,7 @@ struct type *node_get_type_abstract(struct node *abstract_decl, struct type *typ
 }
 
 struct type *node_get_type(struct node *type_name) {
-  struct type *basic_type;
+  struct type *basic_type = NULL;
 
   if(type_name->kind == NODE_TYPE) {
 	  bool is_unsigned;
@@ -890,12 +892,16 @@ struct type *node_get_type(struct node *type_name) {
 	  case TP_LONG:
 		  width = TYPE_WIDTH_LONG;
 		  break;
+	  case TP_VOID:
+		  basic_type = type_void();
+		  break;
 	  default:
 		  assert(0);
 		  break;
 	  }
 
-	  basic_type = type_basic(is_unsigned, width);
+	  if (basic_type == NULL)
+		  basic_type = type_basic(is_unsigned, width);
   }
   
   else if (type_name->kind == NODE_TYPE_NAME)
