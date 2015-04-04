@@ -17,6 +17,8 @@
 #include <assert.h>
 #include <errno.h>
 #include <limits.h>
+#include "type.h"
+
 
 #include "node.h"
 #include "symbol.h"
@@ -161,6 +163,7 @@ struct node *node_number(char *text)
     node->data.number.type = 0;
   }
 
+
   node->data.number.result.type = NULL;
   node->data.number.result.ir_operand = NULL;
   return node;
@@ -186,7 +189,7 @@ struct node *node_unary_operation(int operation, struct node *operand)
   node->data.unary_operation.operation = operation;
   node->data.unary_operation.operand = operand;
   node->data.unary_operation.result.type = NULL;
-  node->data.binary_operation.result.ir_operand = NULL;
+  node->data.unary_operation.result.ir_operand = NULL;
   return node;
 }
 
@@ -303,11 +306,13 @@ struct node *node_comma_list(struct node *next, struct node *data)
  *   Memory may be allocated on the heap.
  *
  */
-struct node *node_cast(struct node *type, struct node *cast)
+struct node *node_cast(struct type *type, struct node *cast, struct node *type_name, int implicit)
 {
   struct node *node = node_create(NODE_CAST);
   node->data.cast.type = type;
   node->data.cast.cast = cast;
+  node->data.cast.type_name = type_name;
+  node->data.cast.implicit = implicit;
   return node;
 }
 
@@ -754,6 +759,8 @@ struct node *node_postfix(int op, struct node *expr)
   struct node *node = node_create(NODE_POSTFIX);
   node->data.postfix.op = op;
   node->data.postfix.expr = expr;
+  node->data.postfix.result.type = NULL;
+  node->data.postfix.result.ir_operand = NULL;
   return node;
 }
 
@@ -776,6 +783,8 @@ struct node *node_prefix(int op, struct node *expr)
   struct node *node = node_create(NODE_PREFIX);
   node->data.prefix.op = op;
   node->data.prefix.expr = expr;
+  node->data.prefix.result.type = NULL;
+  node->data.prefix.result.ir_operand = NULL;
   return node;
 }
 
@@ -793,6 +802,7 @@ struct node *node_statement_list(struct node *init, struct node *statement) {
   return node;
 }
 
+/* TODO Need to add all the node types that can be included in binary operations */
 struct result *node_get_result(struct node *expression) {
   switch (expression->kind) {
     case NODE_NUMBER:
@@ -801,10 +811,101 @@ struct result *node_get_result(struct node *expression) {
       return &expression->data.identifier.symbol->result;
     case NODE_BINARY_OPERATION:
       return &expression->data.binary_operation.result;
+    case NODE_TERNARY_OPERATION:
+    	return &expression->data.ternary_operation.result;
+    case NODE_FUNCTION_CALL:
+      return node_get_result(expression->data.function_call.expression);
+    case NODE_CAST:
+      return &expression->data.cast.result;
+    case NODE_UNARY_OPERATION:
+    	return &expression->data.unary_operation.result;
+    case NODE_POSTFIX:
+    	return &expression->data.postfix.result;
+    case NODE_PREFIX:
+    	return &expression->data.prefix.result;
     default:
       assert(0);
       return NULL;
   }
+}
+
+struct type *node_get_type_abstract(struct node *abstract_decl, struct type *type) {
+	  struct type *pointer_type;
+
+	  switch(abstract_decl->kind)
+	  {
+	  case NODE_POINTERS:
+		  return symbol_get_pointer_type(abstract_decl, type);
+
+	  case NODE_POINTER_DECLARATOR:
+		  pointer_type = symbol_get_pointer_type(abstract_decl->data.pointer_declarator.list, type);
+		  return node_get_type_abstract(abstract_decl->data.pointer_declarator.declarator, pointer_type);
+	  case NODE_DIR_ABST_DEC:
+		  if(abstract_decl->data.dir_abst_dec.declarator == NULL)
+		  {
+			  if(abstract_decl->data.dir_abst_dec.brackets == 0)
+			  {
+				  return node_get_type_abstract(abstract_decl, type);
+			  }
+			  //TODO Could this be type_pointer?
+			  else return type_array(0, type);
+		  }
+		  else
+		  {
+			  if (abstract_decl->data.dir_abst_dec.expr == NULL)
+				  pointer_type = type_array(0, pointer_type);
+			  else
+			  {
+				  int len = evaluate_constant_expr(abstract_decl->data.dir_abst_dec.expr);
+				  pointer_type = type_array(len, pointer_type);
+			  }
+			  return node_get_type_abstract(abstract_decl->data.dir_abst_dec.declarator, pointer_type);
+		  }
+	  default:
+		  assert(0);
+	  }
+}
+
+struct type *node_get_type(struct node *type_name) {
+  struct type *basic_type;
+
+  if(type_name->kind == NODE_TYPE) {
+	  bool is_unsigned;
+	  int width;
+	  if(type_name->data.type.sign == TP_UNSIGNED)
+		  is_unsigned = true;
+	  else is_unsigned = false;
+
+	  switch (type_name->data.type.type)
+	  {
+	  case TP_CHAR:
+		  width = TYPE_WIDTH_CHAR;
+		  break;
+	  case TP_SHORT:
+		  width = TYPE_WIDTH_SHORT;
+		  break;
+	  case TP_INT:
+		  width = TYPE_WIDTH_INT;
+		  break;
+	  case TP_LONG:
+		  width = TYPE_WIDTH_LONG;
+		  break;
+	  default:
+		  assert(0);
+		  break;
+	  }
+
+	  basic_type = type_basic(is_unsigned, width);
+  }
+  
+  else if (type_name->kind == NODE_TYPE_NAME)
+  {
+	  basic_type = node_get_type(type_name->data.type_name.type);
+	  basic_type = node_get_type_abstract(type_name->data.type_name.declarator, basic_type);
+  }
+  else
+	  assert(0);
+  return basic_type;
 }
 
 /***************************************
@@ -915,9 +1016,19 @@ void node_print_number(FILE *output, struct node *number) {
   fprintf(output, "%lu", number->data.number.value);
 }
 
-void node_print_type(FILE *output, struct node *type) {
+
+/**
+ * Printing from types (the structs) is no small task.  The rules for direct
+ * abstract declarators are particularly difficult.  However, their printing is
+ * relatively easily accomplished from the type_name node (as was the process before
+ * cast nodes were changed to hold types, rather than type_name nodes).  Writing a
+ * print from type method that can handle all possible cases is much weightier a task than
+ * writing a method that only needs to cover implicit casts.  Thus, in the interest of
+ * time, I'm keeping the original print methods and adding a special case from the
+ * implicit casts (node_print_type).
+ */
+void node_print_type_node(FILE *output, struct node *type) {
   assert(NULL != type);
-  assert(NODE_TYPE == type->kind);
 
   static const char *types[] = {
     "char",      /* 0 = CHAR */
@@ -933,10 +1044,43 @@ void node_print_type(FILE *output, struct node *type) {
   fputs(types[type->data.type.type], output);
 }
 
+void node_print_type(FILE *output, struct type *type) {
+	switch(type->kind)
+	{
+		case TYPE_BASIC:
+			if(type->data.basic.is_unsigned)
+				fputs("unsigned ", output);
+			switch(type->data.basic.width)
+			{
+				case TYPE_WIDTH_CHAR:
+					fputs("char", output);
+					break;
+				case TYPE_WIDTH_SHORT:
+					fputs("short", output);
+					break;
+				default:
+					fputs("int", output);
+					break;
+			}
+			break;
+		case TYPE_POINTER:
+			node_print_type(output, type->data.pointer.type);
+			fputs(" *", output);
+			break;
+	}
+}
+
 void node_print_cast(FILE *output, struct node *cast) {
+  if(cast->data.cast.implicit == 1)
+	  fputs("/*", output);
   fputs("(", output);
-  node_print_expression(output, cast->data.cast.type);
+  if(cast->data.cast.type_name == NULL)
+	  node_print_type(output, cast->data.cast.type);
+  else
+	  node_print_expression(output, cast->data.cast.type_name);
   fputs(")", output);
+  if(cast->data.cast.implicit == 1)
+	  fputs("*/", output);
   node_print_expression(output, cast->data.cast.cast);
 } 
 
@@ -1202,7 +1346,7 @@ void node_print_expression(FILE *output, struct node *expression) {
       node_print_string(output, expression);
       break;
     case NODE_TYPE:
-      node_print_type(output, expression);
+      node_print_type_node(output, expression);
       break;
     case NODE_COMMA_LIST:
       node_print_comma_list(output, expression, 0);

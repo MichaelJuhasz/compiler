@@ -18,6 +18,7 @@
 
   #include <stdio.h>
   #include "node.h"
+  #include "type.h"
 
   int yylex();
   extern int yylineno;
@@ -123,7 +124,7 @@ unary_op
 cast_expr
   : unary_expr
   | LEFT_PAREN type_name RIGHT_PAREN cast_expr
-        { $$ = node_cast($2, $4); }
+        { $$ = node_cast(node_get_type($2), $4, $2, 0); }
 ;
 
 multiplicative_expr

@@ -155,7 +155,6 @@ void symbol_add_from_ternary_operation(struct symbol_table *table, struct node *
 }
 
 void symbol_add_from_cast(struct symbol_table *table, struct node *cast) {
-  symbol_add_from_expression(table, cast->data.cast.type, NULL);
   symbol_add_from_expression(table, cast->data.cast.cast, NULL);
 } 
 
@@ -176,6 +175,32 @@ void symbol_add_from_function_call(struct symbol_table *table, struct node *call
   symbol_add_from_expression(table, call->data.function_call.expression, NULL);
   if (call->data.function_call.args != NULL)
     symbol_add_from_expression(table, call->data.function_call.args, NULL);
+}
+
+struct type *symbol_get_pointer_type(struct node *pointer, struct type *symbol_type) {
+  struct type *pointer_type;
+
+  pointer_type = malloc(sizeof(struct type));
+  pointer_type->kind = TYPE_POINTER;
+  pointer_type->data.pointer.type = NULL;
+  pointer = pointer->data.pointers.next;
+
+  struct type *head_of_list = pointer_type;
+
+  while (pointer != NULL)
+  {
+  struct type *temp_type = malloc(sizeof(struct type));
+  temp_type->kind = TYPE_POINTER;
+    temp_type->data.pointer.type = NULL;
+    pointer_type->data.pointer.type = temp_type;
+    pointer_type = temp_type;
+
+    pointer = pointer->data.pointers.next;
+  }
+
+  pointer_type->data.pointer.type = symbol_type;
+
+  return head_of_list;
 }
 
 /* symbol_add_from_pointer_declarator - handles pointer declarations, particularly setting up their nested type trees
@@ -199,27 +224,29 @@ void symbol_add_from_pointer_declarator(struct symbol_table *table, struct node 
   }
 
   struct node *pointer = pointer_declarator->data.pointer_declarator.list;
-  struct type *pointer_type;
+//  struct type *pointer_type;
+//
+//  pointer_type = malloc(sizeof(struct type));
+//  pointer_type->kind = TYPE_POINTER;
+//  pointer_type->data.pointer.type = NULL;
+//  pointer = pointer->data.pointers.next;
+//
+//  struct type *head_of_list = pointer_type;
+//
+//  while (pointer != NULL)
+//  {
+//	struct type *temp_type = malloc(sizeof(struct type));
+//	temp_type->kind = TYPE_POINTER;
+//    temp_type->data.pointer.type = NULL;
+//    pointer_type->data.pointer.type = temp_type;
+//    pointer_type = temp_type;
+//
+//    pointer = pointer->data.pointers.next;
+//  }
+//
+//  pointer_type->data.pointer.type = symbol_type;
 
-  pointer_type = malloc(sizeof(struct type));
-  pointer_type->kind = TYPE_POINTER;
-  pointer_type->data.pointer.type = NULL;
-  pointer = pointer->data.pointers.next;
-
-  struct type *head_of_list = pointer_type;
-
-  while (pointer != NULL)
-  {
-	struct type *temp_type = malloc(sizeof(struct type));
-	temp_type->kind = TYPE_POINTER;
-    temp_type->data.pointer.type = NULL;
-    pointer_type->data.pointer.type = temp_type;
-    pointer_type = temp_type;
-
-    pointer = pointer->data.pointers.next;
-  }
-
-  pointer_type->data.pointer.type = symbol_type;
+  struct type *head_of_list = symbol_get_pointer_type(pointer, symbol_type);
 
   symbol_add_from_expression(table, pointer_declarator->data.pointer_declarator.declarator, head_of_list);
 }
@@ -309,20 +336,19 @@ void symbol_add_from_array_declarator(struct symbol_table *table, struct node *a
 	  array_type->data.array.type = symbol_type;
 
 	  /* the evaluate_constant_expr function will return -1 if the constant_expr can't be evaluated */
-	  int len = - 1;
+	  int len = 0;
 
 	  if (array->data.array_declarator.constant != NULL) {
 	    len = evaluate_constant_expr(array->data.array_declarator.constant);
-	  }
 
-	  if (len < 0) {
+	    if (len < 1) {
 		  /* ERROR */
 		  symbol_table_num_errors++;
 		  printf("ERROR - line %d: Cannot declare an array without a constant expression length.\n", array->line_number);
 		  return;
+	    }
 	  }
-	  else
-		  array_type->data.array.len = len;
+	  array_type->data.array.len = len;
   }
 
   symbol_add_from_expression(table, array->data.array_declarator.dir_dec, array_type);
@@ -634,6 +660,7 @@ void symbol_add_from_labeled_statement(struct symbol_table *table, struct node *
   struct type *symbol_type = malloc(sizeof(struct type));
   symbol_type->kind = TYPE_LABEL;
   symbol_add_from_identifier(table, statement->data.labeled_statement.id, symbol_type);
+  symbol_add_from_statement(table, NULL, statement->data.labeled_statement.statement);
 }
 
 /* symbol_add_from_statement - just like add_from_expression, but for statements

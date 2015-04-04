@@ -56,6 +56,7 @@ int type_is_unsigned(struct type *t);
 void type_assign_in_statement_list(struct node *statement_list);
 
 void type_print(FILE *output, struct type *type);
+struct type *type_array(int size, struct type *type);
 
 extern FILE *error_output;
 extern int type_checking_num_errors;

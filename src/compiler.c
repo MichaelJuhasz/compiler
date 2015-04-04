@@ -303,14 +303,14 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  type_assign_in_statement_list(root_node);
+  type_assign_in_translation_unit(root_node);
   if (type_checking_num_errors > 0) {
     print_errors_from_pass(stdout, "Type checking", type_checking_num_errors);
     return 4;
   }
   fprintf(stdout, "=============== PARSE TREE ===============\n");
-  node_print_statement_list(stdout, root_node);
-  if (0 == strcmp("parser", stage)) {
+  node_print_translation_unit(stdout, root_node);
+  if (0 == strcmp("type", stage)) {
     return 0;
   }
 

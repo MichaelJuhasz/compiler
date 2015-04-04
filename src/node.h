@@ -81,6 +81,7 @@ struct node {
     struct {
       char contents[MAX_STR_LENGTH + 1];
       int len;
+      struct result result;
     } string;
 
     struct {
@@ -97,8 +98,11 @@ struct node {
     } unary_operation;
 
     struct {
-      struct node *type;
+      struct type *type;
       struct node *cast;
+      struct node *type_name;
+      int implicit;
+      struct result result;
     } cast;
 
     struct {
@@ -115,6 +119,7 @@ struct node {
       struct node *log_expr;
       struct node *expr;
       struct node *cond_expr;
+      struct result result;
     } ternary_operation;
 
     struct {
@@ -212,10 +217,12 @@ struct node {
     struct {
       struct node *expr;
       int op;
+      struct result result;
     } postfix;
     struct {
       struct node *expr;
       int op;
+      struct result result;
     } prefix;
 
     struct {
@@ -299,7 +306,7 @@ struct node *node_string(char *text, int len);
 struct node *node_unary_operation(int operation, struct node *operand);
 struct node *node_function_call(struct node *expression, struct node *args);
 struct node *node_comma_list(struct node *next, struct node *data);
-struct node *node_cast(struct node *type, struct node *cast);
+struct node *node_cast(struct type *type, struct node *cast, struct node *type_node, int implicit);
 struct node *node_type(int sign, int type);
 struct node *node_ternary_operation(struct node *log_expr, struct node *expr, struct node * cond_expr);
 struct node *node_decl(struct node *type, struct node *init_decl_list);
@@ -322,6 +329,7 @@ struct node *node_translation_unit(struct node *decl, struct node *more_decls);
 struct node *node_dir_abst_dec(struct node *declarator, struct node *expr, int brackets);
 struct node *node_postfix(int op, struct node *expr);
 struct node *node_prefix(int op, struct node *expr);
+struct type *node_get_type(struct node *type_name);
 
 
 struct result *node_get_result(struct node *expression);
