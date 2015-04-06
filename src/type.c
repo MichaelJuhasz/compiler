@@ -48,6 +48,19 @@ void type_print(FILE *output, struct type *kind) {
  * CREATE TYPE EXPRESSIONS *
  ***************************/
 
+/*
+ * type_basic - malloc and return a basic type 
+ *
+ * Parameters:
+ *   is_unsigned - bool - self-explanitory
+ *   width - integer - the number of bytes of arithmetic type
+ *
+ * Returns a basic type of the specified parameters
+ *
+ * Side-effects:
+ *   Memory will be allocated on the heap.
+ *
+ */
 struct type *type_basic(bool is_unsigned, int width) {
   struct type *basic;
 
@@ -60,6 +73,18 @@ struct type *type_basic(bool is_unsigned, int width) {
   return basic;
 }
 
+/*
+ * type_pointer - malloc and return a pointer type 
+ *
+ * Parameters:
+ *   type - type - the type to be pointed to
+ *
+ * Returns a point type of the specified parameters
+ *
+ * Side-effects:
+ *   Memory will be allocated on the heap.
+ *
+ */
 struct type *type_pointer(struct type *type) {
   struct type *pointer;
 
@@ -72,6 +97,19 @@ struct type *type_pointer(struct type *type) {
   return pointer;
 }
 
+/*
+ * type_array - malloc and return an array type 
+ *
+ * Parameters:
+ *   size - integer - length of the array
+ *   type - type - type of the array
+ *
+ * Returns an array type of the specified parameters
+ *
+ * Side-effects:
+ *   Memory will be allocated on the heap.
+ *
+ */
 struct type *type_array(int size, struct type *type) {
   struct type *array;
 
@@ -84,17 +122,20 @@ struct type *type_array(int size, struct type *type) {
   return array;
 }
 
-struct type *type_void() {
-	struct type *void_type;
-	void_type = malloc(sizeof(struct type));
-	void_type->kind = TYPE_VOID;
-	return void_type;
-}
-
 /****************************************
  * TYPE EXPRESSION INFO AND COMPARISONS *
  ****************************************/
 
+/*
+ * type_is_equal - check for type equality 
+ *
+ * Parameters:
+ *   left - type 
+ *   right - type 
+ *
+ * Returns "true" if both are equal
+ *
+ */
 int type_is_equal(struct type *left, struct type *right) {
   int equal;
 
@@ -115,6 +156,16 @@ int type_is_equal(struct type *left, struct type *right) {
   return equal;
 }
 
+/*
+ * type_is_compatible - recursively check for compatibility (mainly for pointers) 
+ *
+ * Parameters:
+ *   left - type 
+ *   right - type 
+ *
+ * Returns "true" if both are compatible
+ *
+ */
 int type_is_compatible(struct type *left, struct type *right) {
     int comp = 0;
 
@@ -166,8 +217,18 @@ int type_is_compatible(struct type *left, struct type *right) {
     }
 }
 
+/*
+ * type_get_from_node - returns a type from a node by calling node_get_result
+ *
+ * Parameters:
+ *   node - node - the node whose type we want 
+ *
+ * Returns the called for type
+ *
+ */
 struct type *type_get_from_node(struct node *node) {
 	struct type *type = node_get_result(node)->type;
+	// For function calls, we really want the return type
 	if (type->kind == TYPE_FUNCTION)
 	{
 		if(node->kind != NODE_IDENTIFIER)
@@ -176,6 +237,14 @@ struct type *type_get_from_node(struct node *node) {
 	return type;
 }
 
+/*
+ * type_check_function_kind - prints an error when functions are being used inappropriately
+ *
+ * Parameters:
+ *   kind - int - the type->kind 
+ *   line_no - int - from the caller's node 
+ *
+ */
 void type_check_function_kind(int kind, int line_no) {
   if(kind == TYPE_FUNCTION)
   {
@@ -200,6 +269,16 @@ int type_is_scalar(struct type *t) {
   return type_is_arithmetic(t) || TYPE_POINTER == t->kind;
 }
 
+/*
+ * type_is_lvalue - checks for modifiable lvalue
+ *
+ * Parameters:
+ *   node - node - the node whose type we want 
+ *
+ * Returns "true" if node has an lvalue - this mostly means identifiers, but can 
+ * also be accessed arrays and addressed of pointers
+ *
+ */
 int type_is_lvalue(struct node *node) {
 	if(node->kind != NODE_IDENTIFIER)
 	{
@@ -225,17 +304,6 @@ int type_is_lvalue(struct node *node) {
 	else return 1;
 }
 
-int type_size(struct type *t) {
-  switch (t->kind) {
-    case TYPE_BASIC:
-      return t->data.basic.width;
-    case TYPE_POINTER:
-      return TYPE_WIDTH_POINTER;
-    default:
-      return 0;
-  }
-}
-
 /*****************
  * TYPE CHECKING *
  *****************/
@@ -245,6 +313,17 @@ int type_checking_num_errors;
 void type_assign_in_expression(struct node *expression);
 struct type *type_assign_in_statement(struct node *statement, struct type *return_type);
 
+/*
+ * type_convert_usual_unary - perfoms usual unary conversions
+ *
+ * Parameters:
+ *   unary_operation - node - the node to convert
+ *
+ * Returns a node, which is only really useful because cast nodes are somethimes inserted
+ * 
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 struct node *type_convert_usual_unary(struct node *unary_operation) {
 	struct type *type = type_get_from_node(unary_operation);
 	struct node *cast_node;
@@ -273,6 +352,17 @@ struct node *type_convert_usual_unary(struct node *unary_operation) {
 	else return unary_operation;
 }
 
+/*
+ * type_convert_usual_binary - perfoms usual binary conversions.  Nothing complex, just
+ * numerous and lengthy rules to enforce.
+ *
+ * Parameters:
+ *   binary_operation - node - the node to convert
+ *
+ * 
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 void type_convert_usual_binary(struct node *binary_operation) {
   assert(NODE_BINARY_OPERATION == binary_operation->kind);
   
@@ -324,7 +414,6 @@ void type_convert_usual_binary(struct node *binary_operation) {
 		  binary_operation->data.binary_operation.result.type = type_basic(false, TYPE_WIDTH_INT);
 		  break;
 	  default:
-		  /* TODO ERROR */
 		  type_checking_num_errors++;
 		  printf("ERROR: line %d - Incompatible operand types.\n", binary_operation->line_number);
 		  binary_operation->data.binary_operation.result.type = left_type;
@@ -360,7 +449,6 @@ void type_convert_usual_binary(struct node *binary_operation) {
 		  binary_operation->data.binary_operation.result.type = left_type;
 		  break;
 	  default:
-		  /* TODO ERROR */
 		  type_checking_num_errors++;
 		  printf("ERROR: line %d - Incompatible operand types.\n", binary_operation->line_number);
 		  binary_operation->data.binary_operation.result.type = left_type;
@@ -380,7 +468,6 @@ void type_convert_usual_binary(struct node *binary_operation) {
 	  }
 	  else
 	  {
-		  /* TODO ERROR - Cannot perform operation on pointers */
 		  type_checking_num_errors++;
 		  printf("ERROR: line %d - Cannot perform operation on pointers.\n", binary_operation->line_number);
 		  binary_operation->data.binary_operation.result.type = left_type;
@@ -388,13 +475,21 @@ void type_convert_usual_binary(struct node *binary_operation) {
   }
   else
   {
-	  /* TODO ERROR - Cannot perform operation on specified operands */
 	  type_checking_num_errors++;
 	  printf("ERROR: line %d - Cannot perform operation on specified operands.\n", binary_operation->line_number);
 	  binary_operation->data.binary_operation.result.type = left_type;
   }
 }
 
+/*
+ * type_check_relational - type checks relational expressions
+ *
+ * Parameters:
+ *   binary_operation - node - the node to type check
+ * 
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 void type_check_relational(struct node *binary_operation) {
 	struct type *left_type = type_get_from_node(binary_operation->data.binary_operation.left_operand);
 	struct type *right_type = type_get_from_node(binary_operation->data.binary_operation.right_operand);
@@ -411,7 +506,6 @@ void type_check_relational(struct node *binary_operation) {
 			  binary_operation->data.binary_operation.result.type = type_basic(false, TYPE_WIDTH_INT);
 		else
 		{
-			/*TODO ERROR - Incomparable types */
 			  type_checking_num_errors++;
 			  printf("ERROR: line %d - Incompatible operand types.\n", binary_operation->line_number);
 			  binary_operation->data.binary_operation.result.type = left_type;
@@ -419,19 +513,26 @@ void type_check_relational(struct node *binary_operation) {
 	}
 	else
 	{
-		/*TODO ERROR - Incomparable types */
 		  type_checking_num_errors++;
 		  printf("ERROR: line %d - Incompatible operand types.\n", binary_operation->line_number);
 		  binary_operation->data.binary_operation.result.type = left_type;
 	}
 }
 
+/*
+ * type_convert_simple_assignment - perfoms simple assignment conversions
+ *
+ * Parameters:
+ *   binary_operation - node - the node to convert
+ * 
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 void type_convert_simple_assignment(struct node *binary_operation) {
   assert(NODE_BINARY_OPERATION == binary_operation->kind);
 
   if(!type_is_lvalue(binary_operation->data.binary_operation.left_operand))
   {
-		/*TODO ERROR - left side not l-value */
 		type_checking_num_errors++;
 		printf("ERROR: line %d - Can't assign to r-value.\n", binary_operation->line_number);
   }
@@ -453,7 +554,6 @@ void type_convert_simple_assignment(struct node *binary_operation) {
 
 	  else if (right_type->kind != TYPE_BASIC)
 	  {
-		  /*TODO ERROR - must be arithmetic type */
 		  type_checking_num_errors++;
 		  printf("ERROR: line %d - Right side of equation must be arithmetic type.\n", binary_operation->line_number);
 	  }
@@ -466,7 +566,6 @@ void type_convert_simple_assignment(struct node *binary_operation) {
 		  if(!(binary_operation->data.binary_operation.right_operand->kind == NODE_NUMBER &&
 				  binary_operation->data.binary_operation.right_operand->data.number.value == 0))
 		  {
-			  /*TODO ERROR - Can't assign non-zero constant to pointer */
 			  type_checking_num_errors++;
 			  printf("ERROR: line %d - Can't assign non-zero constant to pointer.\n", binary_operation->line_number);
 		  }
@@ -474,7 +573,6 @@ void type_convert_simple_assignment(struct node *binary_operation) {
 
 	  else if (!type_is_compatible(left_type, right_type))
 	  {
-		  /* TODO ERROR - Incompatible pointer types. */
 		  type_checking_num_errors++;
 		  printf("ERROR: line %d - Incompatible pointer types.\n", binary_operation->line_number);
 	  }
@@ -483,10 +581,18 @@ void type_convert_simple_assignment(struct node *binary_operation) {
   binary_operation->data.binary_operation.result.type = left_type;
 }
 
+/*
+ * type_convert_compound_assignment - perfoms conversions and type checking on compound assignments
+ *
+ * Parameters:
+ *   binary_operation - node - the node to convert and check
+ * 
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 void type_convert_compound_assignment(struct node *binary_operation) {
 	if(binary_operation->data.binary_operation.left_operand->kind != NODE_IDENTIFIER)
 	{
-	 /*TODO ERROR - requires an l-value */
 		  type_checking_num_errors++;
 		  printf("ERROR: line %d - Can't assign to r-value.\n", binary_operation->line_number);
 	}
@@ -501,13 +607,11 @@ void type_convert_compound_assignment(struct node *binary_operation) {
 		if(binary_operation->data.binary_operation.operation != OP_PLUS_EQUAL &&
 			binary_operation->data.binary_operation.operation != OP_MINUS_EQUAL)
 		{
-			/*TODO ERROR - Cannot apply operation to a pointer */
 			  type_checking_num_errors++;
 			  printf("ERROR: line %d - Can't apply this operation to pointer.\n", binary_operation->line_number);
 		}
 		else if(right_type->kind != TYPE_BASIC)
 		{
-			/*TODO ERROR - Compound assignment to pointer must be integer */
 			  type_checking_num_errors++;
 			  printf("ERROR: line %d - Compound assignment to pointer must be integer.\n", binary_operation->line_number);
 		}
@@ -523,7 +627,6 @@ void type_convert_compound_assignment(struct node *binary_operation) {
 	}
 	else
 	{
-		/*TODO ERROR - Cannot apply operation to a pointer */
 		  type_checking_num_errors++;
 		  printf("ERROR: line %d - Can't apply this operation to pointer.\n", binary_operation->line_number);
 	}
@@ -531,6 +634,15 @@ void type_convert_compound_assignment(struct node *binary_operation) {
 	binary_operation->data.binary_operation.result.type = left_type;
 }
 
+/*
+ * type_assign_in_unary_operation - perfoms type checking on unary operations
+ *
+ * Parameters:
+ *   expression - node - the node to check
+ * 
+ * Side-effects:
+ *   Memory will be allocated on the heap.
+ */
 void type_assign_in_unary_operation(struct node *expression) {
 	if(expression->data.unary_operation.operation == OP_AMPERSAND)
 	{
@@ -593,6 +705,14 @@ void type_assign_in_unary_operation(struct node *expression) {
 	}
 }
 
+/*
+ * type_assign_in_binary_operation - perfoms type checking on binary operations, mostly
+ * just by calling other functions.
+ *
+ * Parameters:
+ *   binary_operation - node - the node to check
+ * 
+ */
 void type_assign_in_binary_operation(struct node *binary_operation) {
   assert(NODE_BINARY_OPERATION == binary_operation->kind);
   type_assign_in_expression(binary_operation->data.binary_operation.left_operand);
@@ -646,6 +766,15 @@ void type_assign_in_binary_operation(struct node *binary_operation) {
   }
 }
 
+/*
+ * type_assign_in_ternary_operation - perfoms type checking on ternary operations
+ *
+ * Parameters:
+ *   expression - node - the node to check
+ * 
+ * Side-effects:
+ *   Memory will be allocated on the heap.
+ */
 void type_assign_in_ternary_operation(struct node *expression) {
 	type_assign_in_expression(expression->data.ternary_operation.log_expr);
 	type_assign_in_expression(expression->data.ternary_operation.expr);
@@ -654,7 +783,6 @@ void type_assign_in_ternary_operation(struct node *expression) {
 	int rel_kind = type_get_from_node(expression->data.ternary_operation.log_expr)->kind;
 	if(rel_kind != TYPE_BASIC && rel_kind != TYPE_POINTER)
 	{
-		/*TODO ERROR - Must evaluate to true or false */
 		  type_checking_num_errors++;
 		  printf("ERROR: line %d - Leftmost operand must be scalar.\n", expression->line_number);
 	}
@@ -704,12 +832,20 @@ void type_assign_in_ternary_operation(struct node *expression) {
 	if(expression->data.ternary_operation.result.type == NULL)
 	{
 		expression->data.ternary_operation.result.type = left_type;
-		/*TODO ERROR - incompatible operand types */
 		  type_checking_num_errors++;
 		  printf("ERROR: line %d - Incompatible operand types.\n", expression->line_number);
 	}
 }
 
+/*
+ * type_assign_in_cast - perfoms type checking on (explicit) cast nodes
+ *
+ * Parameters:
+ *   cast_node - node - the node to check
+ * 
+ * Side-effects:
+ *   Memory will be allocated on the heap.
+ */
 void type_assign_in_cast(struct node *cast_node) {
 	type_assign_in_expression(cast_node->data.cast.cast);
 
@@ -722,7 +858,6 @@ void type_assign_in_cast(struct node *cast_node) {
 	case TYPE_BASIC:
 		if(source_type->kind != TYPE_BASIC && source_type->kind != TYPE_POINTER)
 		{
-			/*TODO ERROR - Only arithmetic and pointer types can be cast to int */
 			  type_checking_num_errors++;
 			  printf("ERROR: line %d - Can't cast non-arithmetic/non-pointer to arithmetic.\n", cast_node->line_number);
 		}
@@ -730,7 +865,6 @@ void type_assign_in_cast(struct node *cast_node) {
 	case TYPE_POINTER:
 		if(source_type->kind != TYPE_BASIC && source_type->kind != TYPE_POINTER)
 		{
-			/*TODO ERROR - Only arithmetic and pointer types can be cast to pointer */
 			  type_checking_num_errors++;
 			  printf("ERROR: line %d - Can't cast non-arithmetic/non-pointer to pointer.\n", cast_node->line_number);
 		}
@@ -739,7 +873,6 @@ void type_assign_in_cast(struct node *cast_node) {
 		// Anything can be cast to void.
 		break;
 	default:
-		/*TODO ERROR - Cannot cast to array or function */
 		type_checking_num_errors++;
 		printf("ERROR: line %d - Can't cast to function or array.\n", cast_node->line_number);
 		break;
@@ -748,11 +881,18 @@ void type_assign_in_cast(struct node *cast_node) {
 	cast_node->data.cast.result.type = cast_node->data.cast.type;
 }
 
-
+/*
+ * type_assign_in_postfix - perfoms type checking on postfix operations
+ *
+ * Parameters:
+ *   expression - node - the node to check
+ * 
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 void type_assign_in_postfix(struct node *expression) {
 	if(expression->data.postfix.expr->kind != NODE_IDENTIFIER)
 	{
-		/*TODO ERROR - Postfix requires a modifiable l-value */
 		type_checking_num_errors++;
 		printf("ERROR: line %d - Requires a modifiable l-value\n", expression->line_number);
 	}
@@ -761,10 +901,18 @@ void type_assign_in_postfix(struct node *expression) {
 	expression->data.postfix.result.type = type_get_from_node(expression->data.postfix.expr);
 }
 
+/*
+ * type_assign_in_prefix - perfoms type checking on prefix operations
+ *
+ * Parameters:
+ *   expression - node - the node to check
+ * 
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 void type_assign_in_prefix(struct node *expression) {
 	if(expression->data.prefix.expr->kind != NODE_IDENTIFIER)
 	{
-		/*TODO ERROR - Prefix requires a modifiable l-value */
 		type_checking_num_errors++;
 		printf("ERROR: line %d - Requires a modifiable l-value\n", expression->line_number);
 	}
@@ -773,6 +921,13 @@ void type_assign_in_prefix(struct node *expression) {
 	expression->data.prefix.result.type = type_get_from_node(expression->data.prefix.expr);
 }
 
+/*
+ * type_assign_in_comma_list- does nothing but pass contents on to assign_in_expression
+ *
+ * Parameters:
+ *   comma_list - node - the node to check
+ * 
+ */
 void type_assign_in_comma_list(struct node *comma_list) {
 	  if (NULL != comma_list->data.comma_list.next) {
 		  type_assign_in_comma_list(comma_list->data.comma_list.next);
@@ -781,13 +936,21 @@ void type_assign_in_comma_list(struct node *comma_list) {
 	  comma_list->data.comma_list.result.type = type_get_from_node(comma_list->data.comma_list.data);
 }
 
+/*
+ * type_assign_in_function_call - perfoms type checking on function calls
+ *
+ * Parameters:
+ *   call - node - the node to check
+ * 
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 void type_assign_in_function_call(struct node *call) {
 	type_assign_in_expression(call->data.function_call.expression);
 
 	// Get the type of the function being called
 	struct type *func_type = node_get_result(call)->type;
 	int arg_num = 0;
-	//
 	if (call->data.function_call.args != NULL)
 	{
 		if (NULL != call->data.function_call.args->data.comma_list.next) {
@@ -798,14 +961,22 @@ void type_assign_in_function_call(struct node *call) {
 		struct type *arg_type = node_get_result(call->data.function_call.args->data.comma_list.data)->type;
 		if(!type_is_compatible(arg_type, func_type->data.func.params[arg_num]))
 		{
-			/*TODO ERROR - Paramater type mismatch */
 			type_checking_num_errors++;
 			printf("ERROR: line %d - Parameter type mismatch.\n", call->line_number);
 		}
 	}
-
 }
 
+/*
+ * type_assign_in_expression - mainly triage, though it also creates
+ * types for numbers and strings
+ *
+ * Parameters:
+ *   expression - node - the node to check
+ * 
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 void type_assign_in_expression(struct node *expression) {
   switch (expression->kind) {
     case NODE_IDENTIFIER:
@@ -873,12 +1044,29 @@ void type_assign_in_expression(struct node *expression) {
   }
 }
 
+/*
+ * type_assign_in_expression_statement - just passes contents to assign_in_expression
+ *
+ * Parameters:
+ *   expression_statement - node - the node to check
+ * 
+ * Because it can be called from assign_in_statement, it has to return, but it has
+ * nothing to return, thus NULL
+ */
 struct type *type_assign_in_expression_statement(struct node *expression_statement) {
   assert(NODE_EXPRESSION_STATEMENT == expression_statement->kind);
   type_assign_in_expression(expression_statement->data.expression_statement.expression);
   return NULL;
 }
 
+/**
+ * The following five functions (not counting assign_in_for) pass nodes, along 
+ * with types to assign_in_statement.
+ *
+ * The type comes from function_definition and allows jump_statement to do 
+ * return type error checking.  They all return a type, which comes from that same
+ * return type checking and is bound for the function definition. 
+ */
 struct type *type_assign_in_statement_list(struct node *statement_list, struct type *return_type) {
   assert(NODE_STATEMENT_LIST == statement_list->kind);
   struct type *type_list = NULL;
@@ -924,14 +1112,19 @@ struct type *type_assign_in_conditional(struct node *conditional, struct type *r
 	  return if_type;
 }
 
-struct type *type_assign_in_for(struct node *for_node) {
+/*
+ * type_assign_in_for - just passes contents to assign_in_expression
+ *
+ * Parameters:
+ *   for_node - node - the node to check
+ */
+void type_assign_in_for(struct node *for_node) {
   if(for_node->data.for_loop.expr1 != NULL)
     type_assign_in_expression(for_node->data.for_loop.expr1);
   if(for_node->data.for_loop.expr2 != NULL)
     type_assign_in_expression(for_node->data.for_loop.expr2);
   if(for_node->data.for_loop.expr3 != NULL)
     type_assign_in_expression(for_node->data.for_loop.expr3);
-  return NULL;
 }
 
 struct type *type_assign_in_while(struct node *while_loop, struct type *return_type) {
@@ -955,12 +1148,15 @@ struct type *type_assign_in_while(struct node *while_loop, struct type *return_t
   }
 }
 
-/* symbol_add_from_jump - totally unnecessary except that returns might be 
- * followed by expressions...
+/* type_assign_in_jump - It's one role is to type check return statements
  *
  * Parameters:
- *       table - symbol_table 
  *       jump_node - node 
+ *       return_type - type - comes from function definition
+ *
+ * Returns a type to function definition.  This is necessary because if a 
+ * function definition includes no return statement, this might be an error
+ * which only the function definition can detect
  */
 struct type *type_assign_in_jump(struct node *jump_node, struct type *return_type) {
   assert(NODE_JUMP == jump_node->kind);
@@ -1003,7 +1199,6 @@ struct type *type_assign_in_jump(struct node *jump_node, struct type *return_typ
 
     			  else if (returned_type->kind != TYPE_BASIC)
     			  {
-    				  /*TODO ERROR - must be arithmetic type */
     				  type_checking_num_errors++;
     				  printf("ERROR: line %d - Return type mismatch.\n", jump_node->line_number);
     			  }
@@ -1013,7 +1208,6 @@ struct type *type_assign_in_jump(struct node *jump_node, struct type *return_typ
     		  {
     			  if (!type_is_compatible(return_type, returned_type))
     			  {
-    				  /* TODO ERROR - Incompatible pointer types. */
     				  type_checking_num_errors++;
     				  printf("ERROR: line %d - Incompatible pointer types.\n", jump_node->line_number);
     			  }

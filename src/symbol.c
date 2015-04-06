@@ -294,7 +294,6 @@ void symbol_add_from_function_declarator(struct symbol_table *table, struct node
   for(i = 0; i < symbol_type->data.func.num_params; i++)
   {
 	  list_node = func->data.function_declarator.params->data.comma_list.data;
-//	  symbol_type->data.func.params[i] = get_symbol_type_from_type_node(list_node->data.parameter_decl.type);
 	  symbol_type->data.func.params[i] = node_get_type(list_node);
 	  list_node = func->data.function_declarator.params->data.comma_list.next;
   }
