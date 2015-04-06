@@ -807,6 +807,8 @@ struct result *node_get_result(struct node *expression) {
   switch (expression->kind) {
     case NODE_NUMBER:
       return &expression->data.number.result;
+    case NODE_STRING:
+      return &expression->data.string.result;
     case NODE_IDENTIFIER:
       return &expression->data.identifier.symbol->result;
     case NODE_BINARY_OPERATION:
@@ -855,14 +857,22 @@ struct type *node_get_type_abstract(struct node *abstract_decl, struct type *typ
 		  else
 		  {
 			  if (abstract_decl->data.dir_abst_dec.expr == NULL)
-				  pointer_type = type_array(0, pointer_type);
+				  pointer_type = type_array(0, type);
 			  else
 			  {
 				  int len = evaluate_constant_expr(abstract_decl->data.dir_abst_dec.expr);
-				  pointer_type = type_array(len, pointer_type);
+				  pointer_type = type_array(len, type);
 			  }
 			  return node_get_type_abstract(abstract_decl->data.dir_abst_dec.declarator, pointer_type);
 		  }
+	  case NODE_FUNCTION_DECLARATOR:
+		  printf("ERROR: line %d - Parameter can't be of type function", abstract_decl->line_number);
+		  return type;
+	  case NODE_ARRAY_DECLARATOR:
+		  pointer_type = type_array(0, type);
+		  return node_get_type_abstract(abstract_decl->data.array_declarator.dir_dec, pointer_type);
+	  case NODE_IDENTIFIER:
+		  return type;
 	  default:
 		  assert(0);
 	  }
@@ -893,7 +903,8 @@ struct type *node_get_type(struct node *type_name) {
 		  width = TYPE_WIDTH_LONG;
 		  break;
 	  case TP_VOID:
-		  basic_type = type_void();
+		  basic_type = malloc(sizeof(struct type));
+		  basic_type->kind = TYPE_VOID;
 		  break;
 	  default:
 		  assert(0);
@@ -908,6 +919,11 @@ struct type *node_get_type(struct node *type_name) {
   {
 	  basic_type = node_get_type(type_name->data.type_name.type);
 	  basic_type = node_get_type_abstract(type_name->data.type_name.declarator, basic_type);
+  }
+  else if (type_name->kind == NODE_PARAMETER_DECL)
+  {
+	  basic_type = node_get_type(type_name->data.parameter_decl.type);
+	  basic_type = node_get_type_abstract(type_name->data.parameter_decl.declarator, basic_type);
   }
   else
 	  assert(0);

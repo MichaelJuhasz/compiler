@@ -120,7 +120,6 @@ int type_is_compatible(struct type *left, struct type *right) {
 
 	switch (left->kind) {
       case TYPE_BASIC:
-      /*TODO This is wrong.  See notes */
         return type_is_equal(left, right);
         break;
       case TYPE_POINTER:
@@ -171,9 +170,18 @@ struct type *type_get_from_node(struct node *node) {
 	struct type *type = node_get_result(node)->type;
 	if (type->kind == TYPE_FUNCTION)
 	{
-		type = type->data.func.return_type;
+		if(node->kind != NODE_IDENTIFIER)
+			type = type->data.func.return_type;
 	}
 	return type;
+}
+
+void type_check_function_kind(int kind, int line_no) {
+  if(kind == TYPE_FUNCTION)
+  {
+	  type_checking_num_errors++;
+	  printf("ERROR: line %d - Identifier of type function cannot be used in this operation.", line_no);
+  }
 }
 
 int type_is_arithmetic(struct type *t) {
@@ -192,9 +200,29 @@ int type_is_scalar(struct type *t) {
   return type_is_arithmetic(t) || TYPE_POINTER == t->kind;
 }
 
-int node_is_lvalue(struct node *n) {
-  assert(NULL != n);
-  return NODE_IDENTIFIER == n->kind;
+int type_is_lvalue(struct node *node) {
+	if(node->kind != NODE_IDENTIFIER)
+	{
+		// This condition will be met iff the left side is an element of an array
+		if(node->kind == NODE_UNARY_OPERATION &&
+			  node->data.unary_operation.operand->kind == NODE_BINARY_OPERATION)
+		{
+			return 1;
+		}
+
+		// This condition will be met when the & operator returns a pointer
+		else if(node->kind == NODE_UNARY_OPERATION &&
+				  type_get_from_node(node)->kind == TYPE_POINTER)
+		{
+			return 1;
+		}
+
+		else
+		{
+			return 0;
+		}
+	}
+	else return 1;
 }
 
 int type_size(struct type *t) {
@@ -216,25 +244,20 @@ int type_checking_num_errors;
 
 void type_assign_in_expression(struct node *expression);
 struct type *type_assign_in_statement(struct node *statement, struct type *return_type);
-//
-//struct node *type_implicit_cast(struct node *operand, int sign, int len) {
-//	struct node *cast_node = node_cast(node_type(sign, len), operand, NULL, 1);
-//	return cast_node;
-//}
 
 struct node *type_convert_usual_unary(struct node *unary_operation) {
 	struct type *type = type_get_from_node(unary_operation);
 	struct node *cast_node;
+	type_check_function_kind(type->kind, unary_operation->line_number);
 	if(type->kind == TYPE_BASIC)
 	{
 		if(type->data.basic.width < TYPE_WIDTH_INT)
 		{
 			cast_node = node_cast(type_basic(false, TYPE_WIDTH_INT), unary_operation, NULL, 1);
-			//unary_operation = cast_node;
+			cast_node->data.cast.result.type = cast_node->data.cast.type;
 			return cast_node;
 		}
 
-//		return type_basic(false, TYPE_WIDTH_INT);
 		return unary_operation;
 	}
 
@@ -242,16 +265,11 @@ struct node *type_convert_usual_unary(struct node *unary_operation) {
 	{
 		struct type *pointer_type = type_pointer(type->data.array.type);
 		cast_node = node_cast(pointer_type, unary_operation, NULL, 1);
-		//unary_operation= cast_node;
+		cast_node->data.cast.result.type = cast_node->data.cast.type;
 
-		//return pointer_type;
 		return cast_node;
 	}
 
-//	if(type->kind == TYPE_FUNCTION)
-//		return type->data.func.return_type;
-
-//	else return type;
 	else return unary_operation;
 }
 
@@ -267,6 +285,9 @@ void type_convert_usual_binary(struct node *binary_operation) {
   int left_kind = left_type->kind;
   int right_kind = right_type->kind;
 
+  type_check_function_kind(left_kind, binary_operation->line_number);
+  type_check_function_kind(right_kind, binary_operation->line_number);
+
   struct node *cast_node;
 
   if(left_kind == TYPE_BASIC && right_kind == TYPE_BASIC)
@@ -276,6 +297,7 @@ void type_convert_usual_binary(struct node *binary_operation) {
 		  cast_node =  node_cast(right_type, binary_operation->data.binary_operation.left_operand, NULL, 1);
 		  binary_operation->data.binary_operation.left_operand = cast_node;
 		  binary_operation->data.binary_operation.result.type = type_basic(true, TYPE_WIDTH_INT);
+		  cast_node->data.cast.result.type = cast_node->data.cast.type;
 	  }
 
 	  if(left_type->data.basic.is_unsigned == true && right_type->data.basic.is_unsigned == false)
@@ -283,6 +305,7 @@ void type_convert_usual_binary(struct node *binary_operation) {
 		  cast_node = node_cast(left_type, binary_operation->data.binary_operation.right_operand, NULL, 1);
 		  binary_operation->data.binary_operation.right_operand = cast_node;
 		  binary_operation->data.binary_operation.result.type = type_basic(true, TYPE_WIDTH_INT);
+	      cast_node->data.cast.result.type = cast_node->data.cast.type;
 	  }
 
 	  else
@@ -313,10 +336,10 @@ void type_convert_usual_binary(struct node *binary_operation) {
 	  switch(binary_operation->data.binary_operation.operation)
 	  {
 	  case OP_PLUS:
-		  binary_operation->data.binary_operation.result.type = type_pointer(node_get_result(binary_operation->data.binary_operation.right_operand)->type );
+		  binary_operation->data.binary_operation.result.type = left_type;
 		  break;
 	  case OP_MINUS:
-		  binary_operation->data.binary_operation.result.type = type_pointer(node_get_result(binary_operation->data.binary_operation.right_operand)->type );
+		  binary_operation->data.binary_operation.result.type = left_type;
 		  break;
 	  case OP_AMPERSAND_AMPERSAND:
 	  case OP_VBAR_VBAR:
@@ -359,6 +382,8 @@ void type_check_relational(struct node *binary_operation) {
 
 	int left_kind = left_type->kind;
 	int right_kind = right_type->kind;
+	type_check_function_kind(left_kind, binary_operation->line_number);
+	type_check_function_kind(right_kind, binary_operation->line_number);
 
 	if (left_kind == right_kind)
 	{
@@ -383,21 +408,25 @@ void type_check_relational(struct node *binary_operation) {
 void type_convert_simple_assignment(struct node *binary_operation) {
   assert(NODE_BINARY_OPERATION == binary_operation->kind);
 
-  if(binary_operation->data.binary_operation.left_operand->kind != NODE_IDENTIFIER)
+  if(!type_is_lvalue(binary_operation->data.binary_operation.left_operand))
   {
-	  /*TODO ERROR - left side not l-value */
-	  type_checking_num_errors++;
-	  printf("ERROR: line %d - Left-most operand must be l-value.", binary_operation->line_number);
+		/*TODO ERROR - left side not l-value */
+		type_checking_num_errors++;
+		printf("ERROR: line %d - Can't assign to r-value.", binary_operation->line_number);
   }
 
   struct type *left_type = type_get_from_node(binary_operation->data.binary_operation.left_operand);
   struct type *right_type = type_get_from_node(binary_operation->data.binary_operation.right_operand);
+
+  type_check_function_kind(left_type->kind, binary_operation->line_number);
+  type_check_function_kind(left_type->kind, binary_operation->line_number);
 
   if(left_type->kind == TYPE_BASIC)
   {
 	  if(right_type->kind == TYPE_BASIC && !type_is_equal(left_type, right_type))
 	  {
 		  struct node *cast_node = node_cast(left_type, binary_operation->data.binary_operation.right_operand, NULL, 1);
+		  cast_node->data.cast.result.type = cast_node->data.cast.type;
 		  binary_operation->data.binary_operation.right_operand = cast_node;
 	  }
 
@@ -455,14 +484,23 @@ void type_convert_compound_assignment(struct node *binary_operation) {
 			  type_checking_num_errors++;
 			  printf("ERROR: line %d - Can't apply this operation to pointer.", binary_operation->line_number);
 		}
-		else if(right_type->kind == TYPE_BASIC)
+		else if(right_type->kind != TYPE_BASIC)
 		{
 			/*TODO ERROR - Compound assignment to pointer must be integer */
 			  type_checking_num_errors++;
 			  printf("ERROR: line %d - Compound assignment to pointer must be integer.", binary_operation->line_number);
 		}
 	}
-	else if(left_type->kind != TYPE_BASIC || right_type->kind != TYPE_BASIC)
+	else if(left_type->kind == TYPE_BASIC && right_type->kind == TYPE_BASIC)
+	{
+		if(!type_is_equal(left_type, type_get_from_node(binary_operation->data.binary_operation.left_operand)))
+		{
+			  struct node *cast_node = node_cast(left_type, binary_operation->data.binary_operation.left_operand, NULL, 1);
+			  cast_node->data.cast.result.type = cast_node->data.cast.type;
+			  binary_operation->data.binary_operation.left_operand = cast_node;
+		}
+	}
+	else
 	{
 		/*TODO ERROR - Cannot apply operation to a pointer */
 		  type_checking_num_errors++;
@@ -735,7 +773,8 @@ void type_assign_in_function_call(struct node *call) {
 		{
 			/*TODO ERROR - Paramater type mismatch */
 			type_checking_num_errors++;
-			printf("ERROR: line %d - Parameter type mismatch", call->line_number);
+			printf("ERROR: line %d - Parameter type mismatch\n", call->line_number);
+			printf("Got: %d  expected: %d\n", arg_type->kind, func_type->data.func.params[arg_num]->kind);
 		}
 		arg_num++;
 	}
@@ -765,8 +804,8 @@ void type_assign_in_expression(struct node *expression) {
 
     case NODE_STRING:;
     	struct type *type;
-    	type = type_basic(false, TYPE_WIDTH_CHAR);
-    	expression->data.string.result.type = type_pointer(type);
+    	type = type_pointer(type_basic(false, TYPE_WIDTH_CHAR));
+    	expression->data.string.result.type = type;
     	break;
 
     case NODE_CAST:
