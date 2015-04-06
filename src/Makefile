@@ -56,6 +56,10 @@ parser: compiler
 
 	./compiler -s parser < test2.c
 
+typeCheck:
+
+	./compiler -s type < test3.c
+
 errorTest:
 
-	./compiler -s parser < errorTest.c
+	./compiler -s type < errorTest2.c

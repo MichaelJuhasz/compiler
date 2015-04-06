@@ -180,7 +180,7 @@ void type_check_function_kind(int kind, int line_no) {
   if(kind == TYPE_FUNCTION)
   {
 	  type_checking_num_errors++;
-	  printf("ERROR: line %d - Identifier of type function cannot be used in this operation.", line_no);
+	  printf("ERROR: line %d - Identifier of type function cannot be used in this operation.\n", line_no);
   }
 }
 
@@ -326,7 +326,8 @@ void type_convert_usual_binary(struct node *binary_operation) {
 	  default:
 		  /* TODO ERROR */
 		  type_checking_num_errors++;
-		  printf("ERROR: line %d - Incompatible operand types.", binary_operation->line_number);
+		  printf("ERROR: line %d - Incompatible operand types.\n", binary_operation->line_number);
+		  binary_operation->data.binary_operation.result.type = left_type;
 		  break;
 	  }
   }
@@ -345,10 +346,24 @@ void type_convert_usual_binary(struct node *binary_operation) {
 	  case OP_VBAR_VBAR:
 		  binary_operation->data.binary_operation.result.type = type_basic(false, TYPE_WIDTH_INT);
 		  break;
+	  // The following operators will be handled elsewhere.
+	  case OP_PLUS_EQUAL:
+	  case OP_MINUS_EQUAL:
+	  case OP_ASTERISK_EQUAL:
+	  case OP_SLASH_EQUAL:
+	  case OP_PERCENT_EQUAL:
+	  case OP_LESS_LESS_EQUAL:
+	  case OP_GREATER_GREATER_EQUAL:
+	  case OP_AMPERSAND_EQUAL:
+	  case OP_CARET_EQUAL:
+	  case OP_VBAR_EQUAL:
+		  binary_operation->data.binary_operation.result.type = left_type;
+		  break;
 	  default:
 		  /* TODO ERROR */
 		  type_checking_num_errors++;
-		  printf("ERROR: line %d - Incompatible operand types.", binary_operation->line_number);
+		  printf("ERROR: line %d - Incompatible operand types.\n", binary_operation->line_number);
+		  binary_operation->data.binary_operation.result.type = left_type;
 		  break;
 	  }
   }
@@ -357,7 +372,9 @@ void type_convert_usual_binary(struct node *binary_operation) {
 	  if (binary_operation->data.binary_operation.operation == OP_MINUS)
 		  binary_operation->data.binary_operation.result.type = type_basic(false, TYPE_WIDTH_INT);
 	  else if(binary_operation->data.binary_operation.operation == OP_AMPERSAND_AMPERSAND ||
-			  binary_operation->data.binary_operation.operation == OP_VBAR_VBAR)
+			  binary_operation->data.binary_operation.operation == OP_VBAR_VBAR ||
+			  binary_operation->data.binary_operation.operation == OP_PLUS_EQUAL ||
+			  binary_operation->data.binary_operation.operation == OP_MINUS_EQUAL)
 	  {
 		  binary_operation->data.binary_operation.result.type = type_basic(false, TYPE_WIDTH_INT);
 	  }
@@ -365,14 +382,16 @@ void type_convert_usual_binary(struct node *binary_operation) {
 	  {
 		  /* TODO ERROR - Cannot perform operation on pointers */
 		  type_checking_num_errors++;
-		  printf("ERROR: line %d - Cannot perform operation on pointers.", binary_operation->line_number);
+		  printf("ERROR: line %d - Cannot perform operation on pointers.\n", binary_operation->line_number);
+		  binary_operation->data.binary_operation.result.type = left_type;
 	  }
   }
   else
   {
 	  /* TODO ERROR - Cannot perform operation on specified operands */
 	  type_checking_num_errors++;
-	  printf("ERROR: line %d - Cannot perform operation on specified operands.", binary_operation->line_number);
+	  printf("ERROR: line %d - Cannot perform operation on specified operands.\n", binary_operation->line_number);
+	  binary_operation->data.binary_operation.result.type = left_type;
   }
 }
 
@@ -394,14 +413,16 @@ void type_check_relational(struct node *binary_operation) {
 		{
 			/*TODO ERROR - Incomparable types */
 			  type_checking_num_errors++;
-			  printf("ERROR: line %d - Incompatible operand types.", binary_operation->line_number);
+			  printf("ERROR: line %d - Incompatible operand types.\n", binary_operation->line_number);
+			  binary_operation->data.binary_operation.result.type = left_type;
 		}
 	}
 	else
 	{
 		/*TODO ERROR - Incomparable types */
 		  type_checking_num_errors++;
-		  printf("ERROR: line %d - Incompatible operand types.", binary_operation->line_number);
+		  printf("ERROR: line %d - Incompatible operand types.\n", binary_operation->line_number);
+		  binary_operation->data.binary_operation.result.type = left_type;
 	}
 }
 
@@ -412,7 +433,7 @@ void type_convert_simple_assignment(struct node *binary_operation) {
   {
 		/*TODO ERROR - left side not l-value */
 		type_checking_num_errors++;
-		printf("ERROR: line %d - Can't assign to r-value.", binary_operation->line_number);
+		printf("ERROR: line %d - Can't assign to r-value.\n", binary_operation->line_number);
   }
 
   struct type *left_type = type_get_from_node(binary_operation->data.binary_operation.left_operand);
@@ -434,7 +455,7 @@ void type_convert_simple_assignment(struct node *binary_operation) {
 	  {
 		  /*TODO ERROR - must be arithmetic type */
 		  type_checking_num_errors++;
-		  printf("ERROR: line %d - Right side of equation must be arithmetic type", binary_operation->line_number);
+		  printf("ERROR: line %d - Right side of equation must be arithmetic type.\n", binary_operation->line_number);
 	  }
   }
 
@@ -447,7 +468,7 @@ void type_convert_simple_assignment(struct node *binary_operation) {
 		  {
 			  /*TODO ERROR - Can't assign non-zero constant to pointer */
 			  type_checking_num_errors++;
-			  printf("ERROR: line %d - Can't assign non-zero constant to pointer.", binary_operation->line_number);
+			  printf("ERROR: line %d - Can't assign non-zero constant to pointer.\n", binary_operation->line_number);
 		  }
 	  }
 
@@ -455,7 +476,7 @@ void type_convert_simple_assignment(struct node *binary_operation) {
 	  {
 		  /* TODO ERROR - Incompatible pointer types. */
 		  type_checking_num_errors++;
-		  printf("ERROR: line %d - Incompatible pointer types.", binary_operation->line_number);
+		  printf("ERROR: line %d - Incompatible pointer types.\n", binary_operation->line_number);
 	  }
   }
 
@@ -467,7 +488,7 @@ void type_convert_compound_assignment(struct node *binary_operation) {
 	{
 	 /*TODO ERROR - requires an l-value */
 		  type_checking_num_errors++;
-		  printf("ERROR: line %d - Leftmost operand must be l-value.", binary_operation->line_number);
+		  printf("ERROR: line %d - Can't assign to r-value.\n", binary_operation->line_number);
 	}
 
 	struct type *left_type = type_get_from_node(binary_operation->data.binary_operation.left_operand);
@@ -482,13 +503,13 @@ void type_convert_compound_assignment(struct node *binary_operation) {
 		{
 			/*TODO ERROR - Cannot apply operation to a pointer */
 			  type_checking_num_errors++;
-			  printf("ERROR: line %d - Can't apply this operation to pointer.", binary_operation->line_number);
+			  printf("ERROR: line %d - Can't apply this operation to pointer.\n", binary_operation->line_number);
 		}
 		else if(right_type->kind != TYPE_BASIC)
 		{
 			/*TODO ERROR - Compound assignment to pointer must be integer */
 			  type_checking_num_errors++;
-			  printf("ERROR: line %d - Compound assignment to pointer must be integer.", binary_operation->line_number);
+			  printf("ERROR: line %d - Compound assignment to pointer must be integer.\n", binary_operation->line_number);
 		}
 	}
 	else if(left_type->kind == TYPE_BASIC && right_type->kind == TYPE_BASIC)
@@ -504,7 +525,7 @@ void type_convert_compound_assignment(struct node *binary_operation) {
 	{
 		/*TODO ERROR - Cannot apply operation to a pointer */
 		  type_checking_num_errors++;
-		  printf("ERROR: line %d - Can't apply this operation to pointer.", binary_operation->line_number);
+		  printf("ERROR: line %d - Can't apply this operation to pointer.\n", binary_operation->line_number);
 	}
 
 	binary_operation->data.binary_operation.result.type = left_type;
@@ -516,7 +537,7 @@ void type_assign_in_unary_operation(struct node *expression) {
 		if(expression->data.unary_operation.operand->kind != NODE_IDENTIFIER)
 		{
 			type_checking_num_errors++;
-			printf("ERROR: line %d - Can't compute the address of non-object.", expression->line_number);
+			printf("ERROR: line %d - Can't compute the address of non-object.\n", expression->line_number);
 			// Give it a dummy type
 			expression->data.unary_operation.result.type = type_basic(false, TYPE_WIDTH_CHAR);
 		}
@@ -542,7 +563,7 @@ void type_assign_in_unary_operation(struct node *expression) {
 				if(type->kind != TYPE_BASIC)
 				{
 					type_checking_num_errors++;
-					printf("ERROR: line %d - Can't apply specified operator to this type.", expression->line_number);
+					printf("ERROR: line %d - Can't apply specified operator to this type.\n", expression->line_number);
 				}
 				expression->data.unary_operation.result.type = type;
 				break;
@@ -551,7 +572,7 @@ void type_assign_in_unary_operation(struct node *expression) {
 				if(type->kind != TYPE_BASIC && type->kind != TYPE_POINTER)
 				{
 					type_checking_num_errors++;
-					printf("ERROR: line %d - Can't logically negate this type.", expression->line_number);
+					printf("ERROR: line %d - Can't logically negate this type.\n", expression->line_number);
 				}
 				expression->data.unary_operation.result.type = type;
 				break;
@@ -559,7 +580,7 @@ void type_assign_in_unary_operation(struct node *expression) {
 				if(type->kind != TYPE_POINTER)
 				{
 					type_checking_num_errors++;
-					printf("ERROR: line %d - Can't deference a non-pointer.", expression->line_number);
+					printf("ERROR: line %d - Can't deference a non-pointer.\n", expression->line_number);
 					// Give it a dummy type
 					expression->data.unary_operation.result.type = type_basic(false, TYPE_WIDTH_CHAR);
 				}
@@ -576,8 +597,6 @@ void type_assign_in_binary_operation(struct node *binary_operation) {
   assert(NODE_BINARY_OPERATION == binary_operation->kind);
   type_assign_in_expression(binary_operation->data.binary_operation.left_operand);
   type_assign_in_expression(binary_operation->data.binary_operation.right_operand);
-
-  printf("\nBinary Operator number: %d\n", binary_operation->data.binary_operation.operation);
 
   switch (binary_operation->data.binary_operation.operation) {
     case OP_ASTERISK:
@@ -632,13 +651,15 @@ void type_assign_in_ternary_operation(struct node *expression) {
 	type_assign_in_expression(expression->data.ternary_operation.expr);
 	type_assign_in_expression(expression->data.ternary_operation.cond_expr);
 
-	if(type_get_from_node(expression->data.ternary_operation.log_expr)->kind != TYPE_BASIC &&
-			type_get_from_node(expression->data.ternary_operation.log_expr)->kind != TYPE_POINTER)
+	int rel_kind = type_get_from_node(expression->data.ternary_operation.log_expr)->kind;
+	if(rel_kind != TYPE_BASIC && rel_kind != TYPE_POINTER)
 	{
 		/*TODO ERROR - Must evaluate to true or false */
 		  type_checking_num_errors++;
-		  printf("ERROR: line %d - Leftmost operand must be scalar.", expression->line_number);
+		  printf("ERROR: line %d - Leftmost operand must be scalar.\n", expression->line_number);
 	}
+
+	type_check_function_kind(rel_kind, expression->line_number);
 
 	int left_kind;
 	int right_kind;
@@ -648,6 +669,9 @@ void type_assign_in_ternary_operation(struct node *expression) {
 
 	left_type = type_get_from_node(expression->data.ternary_operation.expr);
 	right_type = type_get_from_node(expression->data.ternary_operation.cond_expr);
+
+	type_check_function_kind(left_type->kind, expression->line_number);
+	type_check_function_kind(right_type->kind, expression->line_number);
 
 	left_kind = left_type->kind;
 	right_kind = right_type->kind;
@@ -668,7 +692,7 @@ void type_assign_in_ternary_operation(struct node *expression) {
 			expression->data.ternary_operation.result.type = left_type;
 		break;
 	case TYPE_POINTER:
-		// If right is the number 0...                 a ? b : c
+		// If right is the number 0...
 		if (right_kind == TYPE_BASIC &&
 				expression->data.ternary_operation.cond_expr->kind == NODE_NUMBER &&
 				expression->data.ternary_operation.cond_expr->data.number.value == 0)
@@ -682,7 +706,7 @@ void type_assign_in_ternary_operation(struct node *expression) {
 		expression->data.ternary_operation.result.type = left_type;
 		/*TODO ERROR - incompatible operand types */
 		  type_checking_num_errors++;
-		  printf("ERROR: line %d - Incompatible operand types.", expression->line_number);
+		  printf("ERROR: line %d - Incompatible operand types.\n", expression->line_number);
 	}
 }
 
@@ -691,6 +715,8 @@ void type_assign_in_cast(struct node *cast_node) {
 
 	struct type *source_type = node_get_result(cast_node->data.cast.cast)->type;
 
+	type_check_function_kind(source_type->kind, cast_node->line_number);
+
 	switch (cast_node->data.cast.type->kind)
 	{
 	case TYPE_BASIC:
@@ -698,7 +724,7 @@ void type_assign_in_cast(struct node *cast_node) {
 		{
 			/*TODO ERROR - Only arithmetic and pointer types can be cast to int */
 			  type_checking_num_errors++;
-			  printf("ERROR: line %d - Can't cast non-arithmetic/non-pointer to arithmetic.", cast_node->line_number);
+			  printf("ERROR: line %d - Can't cast non-arithmetic/non-pointer to arithmetic.\n", cast_node->line_number);
 		}
 		break;
 	case TYPE_POINTER:
@@ -706,7 +732,7 @@ void type_assign_in_cast(struct node *cast_node) {
 		{
 			/*TODO ERROR - Only arithmetic and pointer types can be cast to pointer */
 			  type_checking_num_errors++;
-			  printf("ERROR: line %d - Can't cast non-arithmetic/non-pointer to pointer.", cast_node->line_number);
+			  printf("ERROR: line %d - Can't cast non-arithmetic/non-pointer to pointer.\n", cast_node->line_number);
 		}
 		break;
 	case TYPE_VOID:
@@ -715,7 +741,7 @@ void type_assign_in_cast(struct node *cast_node) {
 	default:
 		/*TODO ERROR - Cannot cast to array or function */
 		type_checking_num_errors++;
-		printf("ERROR: line %d - Can't cast to function or array.", cast_node->line_number);
+		printf("ERROR: line %d - Can't cast to function or array.\n", cast_node->line_number);
 		break;
 	}
 
@@ -728,7 +754,7 @@ void type_assign_in_postfix(struct node *expression) {
 	{
 		/*TODO ERROR - Postfix requires a modifiable l-value */
 		type_checking_num_errors++;
-		printf("ERROR: line %d - Requires a modifiable l-value", expression->line_number);
+		printf("ERROR: line %d - Requires a modifiable l-value\n", expression->line_number);
 	}
 	type_assign_in_expression(expression->data.postfix.expr);
 	expression->data.postfix.expr = type_convert_usual_unary(expression->data.postfix.expr);
@@ -740,7 +766,7 @@ void type_assign_in_prefix(struct node *expression) {
 	{
 		/*TODO ERROR - Prefix requires a modifiable l-value */
 		type_checking_num_errors++;
-		printf("ERROR: line %d - Requires a modifiable l-value", expression->line_number);
+		printf("ERROR: line %d - Requires a modifiable l-value\n", expression->line_number);
 	}
 	type_assign_in_expression(expression->data.prefix.expr);
 	expression->data.prefix.expr = type_convert_usual_unary(expression->data.prefix.expr);
@@ -765,6 +791,7 @@ void type_assign_in_function_call(struct node *call) {
 	if (call->data.function_call.args != NULL)
 	{
 		if (NULL != call->data.function_call.args->data.comma_list.next) {
+			arg_num = arg_num + 1;
 			type_assign_in_comma_list(call->data.function_call.args->data.comma_list.next);
 		}
 		type_assign_in_expression(call->data.function_call.args->data.comma_list.data);
@@ -773,11 +800,10 @@ void type_assign_in_function_call(struct node *call) {
 		{
 			/*TODO ERROR - Paramater type mismatch */
 			type_checking_num_errors++;
-			printf("ERROR: line %d - Parameter type mismatch\n", call->line_number);
-			printf("Got: %d  expected: %d\n", arg_type->kind, func_type->data.func.params[arg_num]->kind);
+			printf("ERROR: line %d - Parameter type mismatch.\n", call->line_number);
 		}
-		arg_num++;
 	}
+
 }
 
 void type_assign_in_expression(struct node *expression) {
@@ -957,7 +983,7 @@ struct type *type_assign_in_jump(struct node *jump_node, struct type *return_typ
     	if (return_type->kind == TYPE_VOID)
     	{
     		type_checking_num_errors++;
-    		printf("ERROR: line %d - Return type mismatch", jump_node->line_number);
+    		printf("ERROR: line %d - Returned in function with void return type.\n", jump_node->line_number);
     	}
     	else
     	{
@@ -979,7 +1005,7 @@ struct type *type_assign_in_jump(struct node *jump_node, struct type *return_typ
     			  {
     				  /*TODO ERROR - must be arithmetic type */
     				  type_checking_num_errors++;
-    				  printf("ERROR: line %d - Return type mismatch.", jump_node->line_number);
+    				  printf("ERROR: line %d - Return type mismatch.\n", jump_node->line_number);
     			  }
     		  }
 
@@ -989,7 +1015,7 @@ struct type *type_assign_in_jump(struct node *jump_node, struct type *return_typ
     			  {
     				  /* TODO ERROR - Incompatible pointer types. */
     				  type_checking_num_errors++;
-    				  printf("ERROR: line %d - Incompatible pointer types.", jump_node->line_number);
+    				  printf("ERROR: line %d - Incompatible pointer types.\n", jump_node->line_number);
     			  }
     		  }
 
@@ -1014,7 +1040,7 @@ struct type *stype_assign_in_function_definition(struct node *func) {
 		if(returned_type == NULL)
 		{
 			type_checking_num_errors++;
-			printf("ERROR: line %d - Return type not supplied in function definition.", func->line_number);
+			printf("ERROR: line %d - Return type not supplied in function definition.\n", func->line_number);
 		}
 	}
 	return NULL;
@@ -1058,7 +1084,6 @@ struct type *type_assign_in_statement(struct node *statement, struct type *retur
       return type_assign_in_expression_statement(statement);
       break;
     default:
-      printf("%d\n",statement->kind);
       assert(0);
       return NULL;
   }

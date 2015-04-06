@@ -1,0 +1,6 @@
+PS4 Description
+Michael Juhasz
+
+This application type checks the input code, using the AST and symbol tables generated in the previous projects.   
+
+If "make errorTest" is executed, the type checker will run through code that parses correctly, but for one reason or another (as identified by the error messages) will not type check.  "Make typeCheck" will run through a variety of valid code, create and print the symbol tables, conduct the type checking, then print the parse tree.   
