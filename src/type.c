@@ -949,22 +949,30 @@ void type_assign_in_function_call(struct node *call) {
 	type_assign_in_expression(call->data.function_call.expression);
 
 	// Get the type of the function being called
-	struct type *func_type = node_get_result(call)->type;
+	struct type *func_type = node_get_result(call->data.function_call.expression)->type;
 	int arg_num = 0;
-	if (call->data.function_call.args != NULL)
+	struct node *list_node = call->data.function_call.args;
+
+	while(list_node != NULL)
 	{
-		if (NULL != call->data.function_call.args->data.comma_list.next) {
-			arg_num = arg_num + 1;
-			type_assign_in_comma_list(call->data.function_call.args->data.comma_list.next);
-		}
-		type_assign_in_expression(call->data.function_call.args->data.comma_list.data);
+		type_assign_in_expression(list_node->data.comma_list.data);
 		struct type *arg_type = node_get_result(call->data.function_call.args->data.comma_list.data)->type;
+		
+		/*TODO This isn't quite right.  For basic types, they don't need to be compatible*/
 		if(!type_is_compatible(arg_type, func_type->data.func.params[arg_num]))
 		{
 			type_checking_num_errors++;
 			printf("ERROR: line %d - Parameter type mismatch.\n", call->line_number);
 		}
+		arg_num++;
+		list_node = list_node->data.comma_list.next;
 	}
+	if (arg_num != func_type->data.func.num_params)
+	{
+		type_checking_num_errors++;
+		printf("ERROR: line %d - Parameter number mismatch.\n", call->line_number);
+	}
+	call->data.function_call.result.type = func_type->data.func.return_type;
 }
 
 /*

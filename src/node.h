@@ -108,6 +108,7 @@ struct node {
     struct {
       struct node *expression;
       struct node *args;
+      struct result result;
     } function_call;
 
     struct {

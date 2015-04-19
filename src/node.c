@@ -826,7 +826,9 @@ struct result *node_get_result(struct node *expression) {
     case NODE_COMMA_LIST:
     	return &expression->data.comma_list.result;
     case NODE_FUNCTION_CALL:
-      return node_get_result(expression->data.function_call.expression);
+      return &expression->data.function_call.result;
+    case NODE_FUNCTION_DECLARATOR:
+    	return node_get_result(expression->data.function_declarator.dir_dec);
     default:
       assert(0);
       return NULL;

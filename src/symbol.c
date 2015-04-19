@@ -271,6 +271,7 @@ void symbol_add_from_function_declarator(struct symbol_table *table, struct node
 	  function_type->kind = TYPE_FUNCTION;
 	  function_type->data.func.return_type = symbol_type;
 	  function_type->data.func.is_definition = 0;
+      function_type->data.func.table = NULL;
 	  symbol_type = function_type;
   }
 
@@ -294,6 +295,8 @@ void symbol_add_from_function_declarator(struct symbol_table *table, struct node
   for(i = 0; i < symbol_type->data.func.num_params; i++)
   {
 	  list_node = func->data.function_declarator.params->data.comma_list.data;
+
+    /*TODO Store as pointer - after I fix array symbol generation*/
 	  symbol_type->data.func.params[i] = node_get_type(list_node);
 	  list_node = func->data.function_declarator.params->data.comma_list.next;
   }
@@ -615,6 +618,7 @@ void symbol_add_from_function_definition(struct symbol_table *parent_table, stru
   function_type->kind = TYPE_FUNCTION;
   function_type->data.func.return_type = symbol_type;
   function_type->data.func.is_definition = 1;
+  function_type->data.func.table = child_table;
 
   symbol_add_from_expression(parent_table, func->data.function_definition.declarator, function_type);
 
@@ -622,7 +626,10 @@ void symbol_add_from_function_definition(struct symbol_table *parent_table, stru
   while(list_node != NULL)
   {
 	  struct type *param_type = get_symbol_type_from_type_node(list_node->data.comma_list.data->data.parameter_decl.type);
-	  symbol_add_from_expression(child_table, list_node->data.comma_list.data->data.parameter_decl.declarator, param_type);
+	  
+
+    /*TODO Store arrays as pointers - after I fix array symbol generation */
+    symbol_add_from_expression(child_table, list_node->data.comma_list.data->data.parameter_decl.declarator, param_type);
 	  list_node = list_node->data.comma_list.next;
   }
 

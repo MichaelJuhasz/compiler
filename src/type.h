@@ -40,6 +40,8 @@ struct type {
       int num_params;
       struct type **params;
       int is_definition;
+      struct symbol_table *table;
+      int frame_size;
     } func;
   } data;
 };
@@ -53,6 +55,7 @@ int type_equal(struct type *left, struct type *right);
 
 int type_is_arithmetic(struct type *t);
 int type_is_unsigned(struct type *t);
+struct type *type_get_from_node(struct node *node);
 
 struct type *type_assign_in_statement_list(struct node *statement_list, struct type *return_type);
 

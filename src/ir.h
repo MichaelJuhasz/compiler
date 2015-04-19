@@ -10,12 +10,18 @@ struct symbol_table;
 
 #define OPERAND_NUMBER     1
 #define OPERAND_TEMPORARY  2
+// is this sufficient?
+#define OPERAND_LVALUE     3
+#define OPERAND_LABEL      4
+
 struct ir_operand {
   int kind;
 
   union {
     unsigned long number;
     int temporary;
+    int offset;
+    char *label_name;
   } data;
 };
 
@@ -27,6 +33,55 @@ struct ir_operand {
 #define IR_LOAD_IMMEDIATE          6
 #define IR_COPY                    7
 #define IR_PRINT_NUMBER            8
+#define IR_LOG_AND                 9
+#define IR_MOD                     10
+#define IR_SHIFT_LEFT              11
+#define IR_SHIFT_RIGHT             12
+#define IR_LOG_OR                  13
+#define IR_XOR                     14
+#define IR_LESS                    15
+#define IR_LESS_EQUAL              16
+#define IR_GREATER                 17
+#define IR_GREATER_EQUAL           18
+#define IR_EQUAL                   19
+#define IR_NOT_EQUAL               20
+
+#define IR_LOG_NOT                 21
+#define IR_BIT_NOT                 22
+#define IR_MAKE_NEGATIVE           23
+#define IR_MAKE_POSITIVE           24
+#define IR_LOAD_BYTE               25
+#define IR_LOAD_HALF_WORD          26
+/* Both of these expect as their second operand an ir_operand of kind LVALUE,
+ * with an offset 
+ */
+#define IR_ADDRESS_OF              27
+#define IR_LOAD_WORD               28
+#define IR_BYTE_TO_HALF_WORD       29
+#define IR_BYTE_TO_WORD            30
+#define IR_HALF_WORD_TO_BYTE       31
+#define IR_HALF_WORD_TO_WORD       32
+#define IR_WORD_TO_BYTE            33
+#define IR_WORD_TO_HALF_WORD       34
+#define IR_PARAMETER               35
+#define IR_FUNCTION_CALL           36
+#define IR_RESULT_BYTE             37
+#define IR_RESULT_WORD             38
+#define IR_LABEL                   39
+#define IR_GOTO_IF_FALSE           40
+#define IR_GOTO                    41
+#define IR_GOTO_IF_TRUE            42
+#define IR_RETURN                  43
+#define IR_PROC_BEGIN              44
+#define IR_PROC_END                45
+#define IR_RETURN_VOID             46
+#define IR_BIT_AND                 47
+#define IR_BIT_OR                  48
+#define IR_ADDU                    49
+#define IR_SUBU                    50
+#define IR_MULU                    51
+#define IR_DIVU                    52
+
 struct ir_instruction {
   int kind;
   struct ir_instruction *prev, *next;
@@ -37,9 +92,8 @@ struct ir_section {
   struct ir_instruction *first, *last;
 };
 
-void ir_generate_for_statement_list(struct node *statement_list);
-
 void ir_print_section(FILE *output, struct ir_section *section);
+void ir_generate_for_translation_unit(struct node *node);
 
 
 extern FILE *error_output;

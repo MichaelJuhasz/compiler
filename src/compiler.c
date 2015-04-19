@@ -314,7 +314,7 @@ int main(int argc, char **argv) {
     return 0;
   }
 
-  ir_generate_for_statement_list(root_node);
+  ir_generate_for_translation_unit(root_node);
   if (ir_generation_num_errors > 0) {
     print_errors_from_pass(stdout, "IR generation", ir_generation_num_errors);
     return 5;
