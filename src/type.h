@@ -28,6 +28,7 @@ struct type {
 
     struct {
       struct type *type;
+      int size;
     } pointer;
 
     struct {

@@ -57,7 +57,7 @@ static struct ir_section *ir_append(struct ir_section *section,
     instruction->next = NULL;
 
   } else {
-//    instruction->next = section->last->next;
+    instruction->next = section->last->next;
     if (NULL != instruction->next) {
       instruction->next->prev = instruction;
     }
@@ -144,7 +144,7 @@ void ir_generate_for_identifier(struct node *identifier) {
   assert(NODE_IDENTIFIER == identifier->kind);
   instruction = ir_instruction(IR_ADDRESS_OF);
   ir_operand_temporary(instruction, 0);
-  ir_operand_copy(instruction, 1, identifier->data.identifier.symbol->result.ir_operand);
+  ir_operand_copy(instruction, 1, identifier->data.identifier.symbol->result.offset);
   identifier->ir = ir_section(instruction, instruction);
   identifier->data.identifier.symbol->result.ir_operand = &instruction->operands[0];
 }
@@ -166,6 +166,13 @@ void ir_generate_for_string(struct node *string) {
 struct ir_operand *ir_convert_l_to_r(struct ir_operand *operand, struct ir_section *ir, struct node *id_node) {
 	int width = 0;
 	int kind;
+
+	// Probably not the best way to deal with this...
+	if(id_node->kind == NODE_COMMA_LIST)
+	{
+		id_node = id_node->data.comma_list.data;
+	}
+
 	if(id_node->kind == NODE_IDENTIFIER)
 	{
 		if(id_node->data.identifier.symbol->result.type->kind == TYPE_BASIC)
@@ -460,15 +467,15 @@ void ir_generate_for_unary_operation(struct node *unary_operation) {
 	    	unary_operation->data.unary_operation.result.ir_operand = &instruction2->operands[0];
 	    	break;
 
-	    case OP_AMPERSAND:;
-	    	id_node = unary_operation->data.unary_operation.operand;
-	    	assert(id_node->kind == NODE_IDENTIFIER);
-
-	    	instruction = ir_instruction(IR_ADDRESS_OF);
-	    	ir_operand_temporary(instruction, 0);
-	    	ir_operand_copy(instruction, 1, id_node->data.identifier.symbol->result.ir_operand);
-	    	ir_append(unary_operation->ir, instruction);
-	    	unary_operation->data.unary_operation.result.ir_operand = &instruction->operands[0];
+	    case OP_AMPERSAND:
+//	    	id_node = unary_operation->data.unary_operation.operand;
+//	    	assert(id_node->kind == NODE_IDENTIFIER);
+//
+//	    	instruction = ir_instruction(IR_ADDRESS_OF);
+//	    	ir_operand_temporary(instruction, 0);
+//	    	ir_operand_copy(instruction, 1, id_node->data.identifier.symbol->result.ir_operand);
+//	    	ir_append(unary_operation->ir, instruction);
+	    	unary_operation->data.unary_operation.result.ir_operand = &unary_operation->ir->last->operands[0];
 	    	break;
 	  }
 }
@@ -609,6 +616,15 @@ void ir_generate_for_binary_operation(struct node *binary_operation) {
     	break;
     case OP_GREATER_GREATER_EQUAL:
     	ir_generate_for_compound_assignment(IR_SHIFT_RIGHT, binary_operation);
+    	break;
+    case OP_AMPERSAND_EQUAL:
+    	ir_generate_for_compound_assignment(IR_BIT_AND, binary_operation);
+    	break;
+    case OP_CARET_EQUAL:
+    	ir_generate_for_compound_assignment(IR_XOR, binary_operation);
+    	break;
+    case OP_VBAR_EQUAL:
+    	ir_generate_for_compound_assignment(IR_BIT_OR, binary_operation);
     	break;
 
     case OP_AMPERSAND_AMPERSAND:
@@ -768,7 +784,7 @@ void ir_generate_for_postfix(struct node *expression, int is_post) {
 		ir_generate_for_expression(fix_node);
 		expression->ir = ir_copy(fix_node->ir);
 		address_op = node_get_result(fix_node)->ir_operand;
-		op = ir_convert_l_to_r(op, expression->ir, fix_node);
+		op = ir_convert_l_to_r(address_op, expression->ir, fix_node);
 	}
 
 	// If this is postfix set this now, before the operation
@@ -788,11 +804,16 @@ void ir_generate_for_postfix(struct node *expression, int is_post) {
 	{
 		if (expression->data.postfix.op == OP_PLUS_PLUS)
 			kind = IR_ADD;
+		else
+			kind = IR_SUBTRACT;
 	}
 	else if(expression->data.prefix.op == OP_PLUS_PLUS)
+	{
 		kind = IR_ADD;
+	}
 	else
 		kind = IR_SUBTRACT;
+
 
 	struct ir_instruction *oper_instruction = ir_instruction(kind);
 	ir_operand_temporary(oper_instruction, 0);
@@ -814,21 +835,21 @@ void ir_generate_for_function_call(struct node *call) {
 	struct node *list_node = call->data.function_call.args;
 	struct ir_instruction *pass_arg;
 	int arg_num = 0;
-	struct ir_instruction *instruction = ir_instruction(IR_NO_OPERATION);
-	struct ir_section *ir = ir_section(instruction, instruction);
+//	struct ir_instruction *instruction = ir_instruction(IR_NO_OPERATION);
+	struct ir_section *ir;
 	while(list_node != NULL)
 	{
 		ir_generate_for_expression(list_node->data.comma_list.data);
+		ir = ir_copy(list_node->data.comma_list.data->ir);
 		struct ir_operand *arg_op = node_get_result(call->data.function_call.args->data.comma_list.data)->ir_operand;
 		arg_op = ir_convert_l_to_r(arg_op, ir, list_node->data.comma_list.data);
-
 
 		pass_arg = ir_instruction(IR_PARAMETER);
 		pass_arg->operands[0].kind = OPERAND_NUMBER;
 		pass_arg->operands[0].data.number = arg_num++;
 		ir_operand_copy(pass_arg, 1, arg_op);
 		list_node = list_node->data.comma_list.next;
-		ir_append(ir, ir_instruction);
+		ir = ir_append(ir, pass_arg);
 	}
 
 	if(arg_num > 3)
@@ -950,17 +971,21 @@ void ir_generate_for_statement_list(struct node *statement_list, char function_n
 
   if (NULL != init) {
     ir_generate_for_statement_list(init, function_name, cont, brk);
-    ir_generate_for_statement(statement);
-    statement_list->ir = ir_concatenate(init->ir, statement->ir);
+    statement_list->ir = init->ir;
+    ir_generate_for_statement(statement, function_name, cont, brk);
+    if(init->ir == NULL)
+    	statement_list->ir = statement->ir;
+    else
+    	statement_list->ir = ir_concatenate(init->ir, statement->ir);
   } else {
-    ir_generate_for_statement(statement);
+    ir_generate_for_statement(statement, function_name, cont, brk);
     statement_list->ir = statement->ir;
   }
 }
 
 void ir_generate_for_labeled_statement(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk) {
 	char *label_name = statement->data.labeled_statement.id->data.identifier.name;
-	char str_buf[256];
+	char *str_buf = malloc(256);
 	sprintf(str_buf,"_UserLabel_%s_%s", function_name, label_name);
 	struct ir_instruction *label_instruction = ir_instruction(IR_LABEL);
 	label_instruction->operands[0].kind = OPERAND_LABEL;
@@ -1042,21 +1067,23 @@ void ir_generate_for_for(struct node *statement, char function_name[]) {
 	// Here's where we loop back to
 	struct ir_instruction *continue_label = ir_instruction(IR_LABEL);
 	ir_operand_label(continue_label, 0);
-	ir_append(statement->ir, continue_label);
+	statement->ir = ir_append(statement->ir, continue_label);
 
 	// Set up the break label, but don't append
-	struct ir_instruction *branch_instruction = ir_instruction(IR_GOTO_IF_FALSE);
-	ir_operand_copy(branch_instruction, 0, node_get_result(for_expr->data.for_loop.expr2)->ir_operand);
-	ir_operand_label(branch_instruction, 1);
-
 	struct ir_instruction *break_label = ir_instruction(IR_LABEL);
-	ir_operand_copy(break_label, 0, &branch_instruction->operands[1]);
+	ir_operand_label(break_label, 0);
 
 	// If it's present, evaluate expr2 and go on if true
 	if(for_expr->data.for_loop.expr2 != NULL)
 	{
 		ir_generate_for_expression(for_expr->data.for_loop.expr2);
-		statement->ir = ir_concatenate(statement->ir, for_expr->data.for_loop.expr2);
+		statement->ir = ir_concatenate(statement->ir, for_expr->data.for_loop.expr2->ir);
+		struct ir_opearnd *op = node_get_result(for_expr->data.for_loop.expr2)->ir_operand;
+		op = ir_convert_l_to_r(op, statement->ir, for_expr->data.for_loop.expr2);
+
+		struct ir_instruction *branch_instruction = ir_instruction(IR_GOTO_IF_FALSE);
+		ir_operand_copy(branch_instruction, 0, op);
+		ir_operand_copy(branch_instruction, 1, &break_label->operands[0]);
 		ir_append(statement->ir, branch_instruction);
 	}
 
@@ -1126,7 +1153,7 @@ void ir_generate_for_while(struct node *statement, char function_name[]) {
 	    // DO-WHILE
 		case 1:
 			ir_operand_label(continue_label, 0);
-			ir_append(statement->ir, continue_label);
+			statement->ir = ir_append(statement->ir, continue_label);
 
 			// Generate the break label, because it's needed for the statement, but don't append it here
 			ir_operand_label(break_label, 0);
@@ -1144,7 +1171,7 @@ void ir_generate_for_while(struct node *statement, char function_name[]) {
 			// Branch if true
 			branch_instruction = ir_instruction(IR_GOTO_IF_TRUE);
 			ir_operand_copy(branch_instruction, 0, result_op);
-			ir_operand_copy(branch_instruction, 1, &continue_branch->operands[0]);
+			ir_operand_copy(branch_instruction, 1, &continue_label->operands[0]);
 			ir_append(statement->ir, branch_instruction);
 
 			// Break label
@@ -1168,7 +1195,7 @@ void ir_generate_for_jump(struct node *statement, char function_name[], struct i
 		  sprintf(str_buf,"_UserLabel_%s_%s", function_name, label_name);
 		  branch_instruction->operands[0].kind = OPERAND_LABEL;
 		  branch_instruction->operands[0].data.label_name = str_buf;
-		  ir_append(statement->ir, branch_instruction);
+		  statement->ir = ir_append(statement->ir, branch_instruction);
 	      break;
 
 	    /* CONTINUE */
@@ -1182,7 +1209,7 @@ void ir_generate_for_jump(struct node *statement, char function_name[], struct i
 	      else
 	      {
 	    	  ir_operand_copy(branch_instruction, 0, &cont->operands[0]);
-	    	  ir_append(statement->ir, branch_instruction);
+	    	  statement->ir = ir_append(statement->ir, branch_instruction);
 	      }
 
 	      break;
@@ -1198,7 +1225,7 @@ void ir_generate_for_jump(struct node *statement, char function_name[], struct i
 	      else
 	      {
 	    	  ir_operand_copy(branch_instruction, 0, &brk->operands[0]);
-	    	  ir_append(statement->ir, branch_instruction);
+	    	  statement->ir = ir_append(statement->ir, branch_instruction);
 	      }
 
 	      break;
@@ -1212,14 +1239,16 @@ void ir_generate_for_jump(struct node *statement, char function_name[], struct i
 		      return_instruction = ir_instruction(IR_RETURN);
 	    	  ir_generate_for_expression(statement->data.jump.expr);
 	    	  statement->ir = ir_copy(statement->data.jump.expr->ir);
-	    	  ir_operand_copy(return_instruction, 0, node_get_result(statement->data.jump.expr)->ir_operand);
+	    	  struct ir_operand *op = node_get_result(statement->data.jump.expr)->ir_operand;
+	    	  op = ir_convert_l_to_r(op, statement->ir, statement->data.jump.expr);
+	    	  ir_operand_copy(return_instruction, 0, op);
 	      }
 	      else
 	      {
 	    	  return_instruction = ir_instruction(IR_RETURN_VOID);
 	      }
 
-	      ir_append(statement->ir, return_instruction);
+	      statement->ir = ir_append(statement->ir, return_instruction);
 	      break;
 
 	    default:
@@ -1256,6 +1285,22 @@ int ir_set_symbol_table_offsets(struct symbol_table *table, int overhead){
 	    		size = iter->symbol.result.type->data.array.len * array_size;
 	    	}
 	    }
+	    else if (iter->symbol.result.type->kind == TYPE_POINTER)
+	    {
+	    	if (iter->symbol.result.type->data.pointer.size > 1)
+	    	{
+	    		int array_size = 4;
+
+	    		if(iter->symbol.result.type->data.pointer.type->kind == TYPE_BASIC)
+	    		{
+	    			if(iter->symbol.result.type->data.pointer.type->data.basic.width == TYPE_WIDTH_CHAR)
+	    				array_size = 1;
+	    			else if(iter->symbol.result.type->data.pointer.type->data.basic.width == TYPE_WIDTH_SHORT)
+	    				array_size = 2;
+	    		}
+	    		size = iter->symbol.result.type->data.pointer.size * array_size;
+	    	}
+	    }
 
 	    // Align halfwords
 	    if(size == 2)
@@ -1269,9 +1314,9 @@ int ir_set_symbol_table_offsets(struct symbol_table *table, int overhead){
 	    	overhead = ((overhead + 3) / 4) * 4;
 	    }
 
-	    iter->symbol.result.ir_operand = malloc(sizeof(struct ir_operand));
-	    iter->symbol.result.ir_operand->kind = OPERAND_LVALUE;
-	    iter->symbol.result.ir_operand->data.offset = overhead;
+	    iter->symbol.result.offset = malloc(sizeof(struct ir_operand));
+	    iter->symbol.result.offset->kind = OPERAND_LVALUE;
+	    iter->symbol.result.offset->data.offset = overhead;
 	    overhead += size;
 	  }
 
@@ -1477,7 +1522,7 @@ static void ir_print_operand(FILE *output, struct ir_operand *operand) {
       break;
 
     case OPERAND_LABEL:
-        fprintf(output, "     label%s", operand->data.label_name);
+        fprintf(output, "     %s", operand->data.label_name);
         break;
 
     case OPERAND_LVALUE:
@@ -1506,6 +1551,7 @@ void ir_print_instruction(FILE *output, struct ir_instruction *instruction) {
     case IR_EQUAL:
     case IR_NOT_EQUAL:
     case IR_BIT_OR:
+    case IR_BIT_AND:
     case IR_ADDU:
     case IR_SUBU:
     case IR_MULU:

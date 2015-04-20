@@ -59,6 +59,7 @@ struct type;
 struct result {
   struct type *type;
   struct ir_operand *ir_operand;
+  struct ir_operand *offset;
 };
 
 struct node {

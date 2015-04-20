@@ -183,6 +183,7 @@ struct type *symbol_get_pointer_type(struct node *pointer, struct type *symbol_t
   pointer_type = malloc(sizeof(struct type));
   pointer_type->kind = TYPE_POINTER;
   pointer_type->data.pointer.type = NULL;
+  pointer_type->data.pointer.size = 0;
   pointer = pointer->data.pointers.next;
 
   struct type *head_of_list = pointer_type;
@@ -193,6 +194,8 @@ struct type *symbol_get_pointer_type(struct node *pointer, struct type *symbol_t
   temp_type->kind = TYPE_POINTER;
     temp_type->data.pointer.type = NULL;
     pointer_type->data.pointer.type = temp_type;
+    pointer_type->data.pointer.size = 0;
+
     pointer_type = temp_type;
 
     pointer = pointer->data.pointers.next;
@@ -327,30 +330,31 @@ void symbol_add_from_array_declarator(struct symbol_table *table, struct node *a
 	  return;
   }
 
+  /* the evaluate_constant_expr function will return -1 if the constant_expr can't be evaluated */
+  int len = 0;
+
+  if (array->data.array_declarator.constant != NULL) {
+    len = evaluate_constant_expr(array->data.array_declarator.constant);
+
+    if (len < 1) {
+	  /* ERROR */
+	  symbol_table_num_errors++;
+	  printf("ERROR - line %d: Cannot declare an array without a constant expression length.\n", array->line_number);
+	  return;
+    }
+  }
+
   if (array->data.array_declarator.dir_dec->kind != NODE_ARRAY_DECLARATOR)
   {
 	  array_type->kind = TYPE_POINTER;
 	  array_type->data.pointer.type = symbol_type;
+	  array_type->data.pointer.size = len;
   }
 
   else
   {
 	  array_type->kind = TYPE_ARRAY;
 	  array_type->data.array.type = symbol_type;
-
-	  /* the evaluate_constant_expr function will return -1 if the constant_expr can't be evaluated */
-	  int len = 0;
-
-	  if (array->data.array_declarator.constant != NULL) {
-	    len = evaluate_constant_expr(array->data.array_declarator.constant);
-
-	    if (len < 1) {
-		  /* ERROR */
-		  symbol_table_num_errors++;
-		  printf("ERROR - line %d: Cannot declare an array without a constant expression length.\n", array->line_number);
-		  return;
-	    }
-	  }
 	  array_type->data.array.len = len;
   }
 
