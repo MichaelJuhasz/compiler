@@ -489,6 +489,8 @@ void ir_generate_for_log_and_or(struct node *binary_operation, int or) {
 	// Result will go in this instruction
 	struct ir_instruction *result_instruction = ir_instruction(IR_COPY);
 	ir_operand_temporary(result_instruction, 0);
+	struct ir_instruction *other_result = ir_instruction(IR_COPY);
+	ir_operand_copy(other_result, 0, &result_instruction->operands[0]);
 
 	// Set the GOTO kind, based on && or ||
 	int kind;
@@ -501,7 +503,7 @@ void ir_generate_for_log_and_or(struct node *binary_operation, int or) {
 	struct ir_instruction *branch_instruction = ir_instruction(kind);
 	ir_operand_copy(branch_instruction, 0, left_op);
 	ir_operand_label(branch_instruction, 1);
-	ir_append(binary_operation->ir, branch_instruction);
+	binary_operation->ir = ir_append(binary_operation->ir, branch_instruction);
 
 	// Right expression
 	ir_generate_for_expression(binary_operation->data.binary_operation.right_operand);
@@ -510,14 +512,14 @@ void ir_generate_for_log_and_or(struct node *binary_operation, int or) {
 	right_op = ir_convert_l_to_r(right_op, binary_operation->ir, binary_operation->data.binary_operation.right_operand);
 
 	ir_operand_copy(result_instruction, 1, right_op);
-	ir_append(binary_operation->ir, result_instruction);
+	binary_operation->ir = ir_append(binary_operation->ir, result_instruction);
 
 	// Jump label
 	struct ir_instruction *label = ir_instruction(IR_LABEL);
 	ir_operand_copy(label, 0, &branch_instruction->operands[1]);
-	ir_append(binary_operation->ir, label);
-	ir_operand_copy(result_instruction, 1, left_op);
-	ir_append(binary_operation->ir, result_instruction);
+	binary_operation->ir = ir_append(binary_operation->ir, label); // OK here
+	ir_operand_copy(other_result, 1, left_op);
+	binary_operation->ir = ir_append(binary_operation->ir, other_result);
 
 	/*TODO how to save the result? */
 	binary_operation->data.binary_operation.result.ir_operand = &result_instruction->operands[0];
@@ -652,6 +654,8 @@ void ir_generate_for_ternary_operation(struct node *expression) {
 	// temporary operand
 	struct ir_instruction *store_instruction = ir_instruction(IR_COPY);
 	ir_operand_temporary(store_instruction, 0);
+	struct ir_instruction *other_store = ir_instruction(IR_COPY);
+	ir_operand_copy(other_store, 0, &store_instruction->operands[0]);
 
 	expr_op = ir_convert_l_to_r(expr_op, expression->ir, expression->data.ternary_operation.log_expr);
 
@@ -688,8 +692,8 @@ void ir_generate_for_ternary_operation(struct node *expression) {
 	result_op = node_get_result(expression->data.ternary_operation.cond_expr)->ir_operand;
 	result_op = ir_convert_l_to_r(result_op, expression->ir, expression->data.ternary_operation.cond_expr);
 
-	ir_operand_copy(store_instruction, 1, result_op);
-	expression->ir = ir_append(expression->ir, store_instruction); // This didn't work.  Or did it?...
+	ir_operand_copy(other_store, 1, result_op);
+	expression->ir = ir_append(expression->ir, other_store); // This didn't work.  Or did it?...
 	// Do I need a goto here, too?
 
 	struct ir_instruction *second_label = ir_instruction(IR_LABEL);
