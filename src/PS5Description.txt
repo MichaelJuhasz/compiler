@@ -1,0 +1,8 @@
+PS5 Description
+Michael Juhasz
+
+This application walks through the AST, creating IR instructions according to the expressions and statements prensent in the nodes created during initial parsing.  Additionally, as preperation for mips translation (and useful for ir operand creation, as well), when ir.c encounters a function definition, it will walk through all of that function's descendant symbol tables, and update symbol records to include an offset value.  These offset values will be used by spim to store identifier values in the stack frame.  
+
+Most errors have already been caught at this point (unlike what was apparently expected, or intended, I implemented return value error checking in type.c), but there are a few errors that can be caught by ir.c.  "Make irErrorTest" will try to create IR for a short program that will generate the three errors ir.c looks for. 
+
+"Make generateIR" will run through a variety of valid code, create and print the symbol tables, conduct the type checking, print the parse tree, then print a series of IR instructions corresponding to the c code in Test4.c   

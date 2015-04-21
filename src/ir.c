@@ -101,13 +101,25 @@ static void ir_operand_copy(struct ir_instruction *instruction, int position, st
   instruction->operands[position] = *operand;
 }
 
+/* ir_operand_string - makes a new label for string constant, puts the value
+ *                     into a global (*gasp) array of char pointers
+ *
+ * Parameters: 
+ *   instruction - ir_instruction - instruction to add label to
+ *   position - int - operand number 
+ *   string - node - the node whose string value goes into the array
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 static void ir_operand_string(struct ir_instruction *instruction, int position, struct node *string) {
 	static int str_count;
 
 	if(str_count > 999)
 	{
 		ir_generation_num_errors++;
-		printf("ERROR - Too many strings!");
+		printf("ERROR - Too many strings!\n");
 	}
 	string_labels[str_count] = string->data.string.contents;
 	instruction->operands[position].data.label_name = malloc(256);
@@ -115,11 +127,59 @@ static void ir_operand_string(struct ir_instruction *instruction, int position, 
 	instruction->operands[position].kind = OPERAND_LABEL;
 }
 
+/* ir_operand_label - makes a generated label operand, sticks it into instruction
+ *
+ * Parameters: 
+ *   instruction - ir_instruction - instruction to add label to
+ *   position - int - operand number 
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 static void ir_operand_label(struct ir_instruction *instruction, int position) {
 	static int lbl_count;
 	instruction->operands[position].data.label_name = malloc(256);
 	sprintf(instruction->operands[position].data.label_name, "_GeneratedLabel_%d", lbl_count++);
 	instruction->operands[position].kind = OPERAND_LABEL;
+}
+
+/* ir_pointer_arithmetic_conversion - adds extra instructions for doing
+ *                                    pointer arithmetic (multiply by pointer-type 
+ *                                    size)
+ *
+ * Parameters: 
+ *   type - type - type of the pointer
+ *   ir - ir_section - section to append instructions to 
+ *   right_op - ir_operand - contains the register with the addend
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
+struct ir_operand *ir_pointer_arithmetic_conversion(struct type *type, struct ir_section *ir, struct ir_operand *right_op) {
+	  struct ir_instruction *factor_inst, *pointer_inst;
+
+	  int size;
+	  if(type->data.pointer.type->kind == TYPE_BASIC)
+	  {
+		  size = type->data.pointer.type->data.basic.width;
+	  }
+	  else
+		  size = TYPE_WIDTH_POINTER;
+
+	  factor_inst = ir_instruction(IR_LOAD_IMMEDIATE);
+	  ir_operand_temporary(factor_inst, 0);
+	  factor_inst->operands[1].kind = OPERAND_NUMBER;
+	  factor_inst->operands[1].data.number = size;
+	  ir_append(ir, factor_inst);
+
+	  pointer_inst = ir_instruction(IR_MULTIPLY);
+	  ir_operand_temporary(pointer_inst, 0);
+	  ir_operand_copy(pointer_inst, 1, &factor_inst->operands[0]);
+	  ir_operand_copy(pointer_inst, 2, right_op);
+	  ir_append(ir, pointer_inst);
+	  return &pointer_inst->operands[0];
 }
 
 
@@ -162,8 +222,18 @@ void ir_generate_for_string(struct node *string) {
 	string->data.string.result.ir_operand = &instruction->operands[0];
 }
 
-/* TODO Pretty sure this needs to work for unary operations, too */
-struct ir_operand *ir_convert_l_to_r(struct ir_operand *operand, struct ir_section *ir, struct node *id_node) {
+/* ir_convert_l_to_r - loads value of operands that point at an address
+ *
+ * Parameters: 
+ *   operand - ir_operand - operand, which may point to an address
+ *   ir - ir_section - section to append instruction to
+ *   id_node - node - any kind of node, really 
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
+ struct ir_operand *ir_convert_l_to_r(struct ir_operand *operand, struct ir_section *ir, struct node *id_node) {
 	int width = 0;
 	int kind;
 
@@ -229,6 +299,16 @@ struct ir_operand *ir_convert_l_to_r(struct ir_operand *operand, struct ir_secti
 
 void ir_generate_for_expression(struct node *expression);
 
+/* ir_generate_for_numeric_unary - adds a unary operation instruction 
+ *
+ * Parameters: 
+ *   kind - int - type of unary operation
+ *   unary_operation - node - contains the operation and operand 
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 void ir_generate_for_numeric_unary(int kind, struct node *unary_operation) {
 	  struct ir_instruction *instruction;
 	  assert(NODE_UNARY_OPERATION == unary_operation->kind);
@@ -246,31 +326,17 @@ void ir_generate_for_numeric_unary(int kind, struct node *unary_operation) {
 	  unary_operation->data.unary_operation.result.ir_operand = &instruction->operands[0];
 }
 
-struct ir_operand *ir_pointer_arithmetic_conversion(struct type *type, struct node *binary_operation, struct ir_operand *right_op) {
-	  struct ir_instruction *factor_inst, *pointer_inst;
-
-	  int size;
-	  if(type->data.pointer.type->kind == TYPE_BASIC)
-	  {
-		  size = type->data.pointer.type->data.basic.width;
-	  }
-	  else
-		  size = TYPE_WIDTH_POINTER;
-
-	  factor_inst = ir_instruction(IR_LOAD_IMMEDIATE);
-	  ir_operand_temporary(factor_inst, 0);
-	  factor_inst->operands[1].kind = OPERAND_NUMBER;
-	  factor_inst->operands[1].data.number = size;
-	  ir_append(binary_operation->ir, factor_inst);
-
-	  pointer_inst = ir_instruction(IR_MULTIPLY);
-	  ir_operand_temporary(pointer_inst, 0);
-	  ir_operand_copy(pointer_inst, 1, &factor_inst->operands[0]);
-	  ir_operand_copy(pointer_inst, 2, right_op);
-	  ir_append(binary_operation->ir, pointer_inst);
-	  return &pointer_inst->operands[0];
-}
-
+/* ir_generate_for_arithmetic_binary_operation - adds a binary operation instructions 
+ *  Calls convert_l_to_r in case of lvalue operands and pointer_arithmetic in case of pointers
+ *
+ * Parameters: 
+ *   kind - int - type of binary operation
+ *   binary_operation - node - contains the operation and operands
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 void ir_generate_for_arithmetic_binary_operation(int kind, struct node *binary_operation) {
   struct ir_instruction *instruction;
   struct ir_instruction *pointer_inst;
@@ -307,12 +373,12 @@ void ir_generate_for_arithmetic_binary_operation(int kind, struct node *binary_o
   {
 	  if(right_kind != TYPE_POINTER)
 	  {
-		  right_op = ir_pointer_arithmetic_conversion(left_type, binary_operation, right_op);
+		  right_op = ir_pointer_arithmetic_conversion(left_type, binary_operation->ir, right_op);
 	  }
   }
   else if(right_kind == TYPE_POINTER)
   {
-	  left_op = ir_pointer_arithmetic_conversion(right_type, binary_operation, left_op);
+	  left_op = ir_pointer_arithmetic_conversion(right_type, binary_operation->ir, left_op);
 
   }
   if(left_type == TYPE_BASIC && left_type->data.basic.is_unsigned)
@@ -348,12 +414,21 @@ void ir_generate_for_arithmetic_binary_operation(int kind, struct node *binary_o
    */
   if(left_kind == TYPE_POINTER && right_kind == TYPE_POINTER)
   {
-	  struct ir_operand *op = ir_pointer_arithmetic_conversion(left_type, binary_operation, &instruction->operands[0]);
+	  struct ir_operand *op = ir_pointer_arithmetic_conversion(left_type, binary_operation->ir, &instruction->operands[0]);
 	  binary_operation->data.binary_operation.result.ir_operand = op;
   }
 
 }
 
+/* ir_generate_for_simple - adds a simple assignment instructions 
+ *
+ * Parameters: 
+ *   binary_operation - node - contains the operands
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 void ir_generate_for_simple_assignment(struct node *binary_operation) {
   struct ir_instruction *instruction;
   struct node *left;
@@ -371,12 +446,10 @@ void ir_generate_for_simple_assignment(struct node *binary_operation) {
   instruction = ir_instruction(IR_COPY);
 
   if (left->kind != NODE_CAST){
-	  ir_generate_for_expression(left);
-	  binary_operation->ir = ir_concatenate(binary_operation->ir, left->ir);
-	  ir_operand_copy(instruction, 0, node_get_result(left)->ir_operand);
-  }
-
-  /* TODO Deal with implicit casts on the left */
+ 	  ir_generate_for_expression(left);
+ 	  binary_operation->ir = ir_concatenate(binary_operation->ir, left->ir);
+ 	  ir_operand_copy(instruction, 0, node_get_result(left)->ir_operand);
+   }
 
   ir_operand_copy(instruction, 1, op);
 
@@ -385,48 +458,52 @@ void ir_generate_for_simple_assignment(struct node *binary_operation) {
   binary_operation->data.binary_operation.result.ir_operand = &instruction->operands[0];
 }
 
+struct node *ir_get_id(struct node *node) {
+	switch(node->kind)
+	{
+	case NODE_IDENTIFIER:
+		return node;
+	case NODE_UNARY_OPERATION:
+		return ir_get_id(node->data.unary_operation.operand);
+	case NODE_BINARY_OPERATION:
+		return ir_get_id(node->data.binary_operation.left_operand);
+	case NODE_POSTFIX:
+		return ir_get_id(node->data.postfix.expr);
+	case NODE_PREFIX:
+		return ir_get_id(node->data.prefix.expr);
+	case NODE_CAST:
+		return ir_get_id(node->data.cast.cast);
+	case NODE_COMMA_LIST:
+		return ir_get_id(node->data.comma_list.data);
+	default:
+		assert(0);
+		return NULL;
+	}
+}
+
+/* ir_generate_for_compound - feeds operands to generate_for_binary and
+ *  grabs the result and the address from the binary operation instructions 
+ *
+ * Parameters: 
+ *   kind - int - type of assignment 
+ *   bnary_operation - node - contains the operation and operands
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 /* TODO if implicit cast, cast for the operation, but not for the assignment */
 void ir_generate_for_compound_assignment(int kind, struct node *binary_operation) {
 	ir_generate_for_arithmetic_binary_operation(kind, binary_operation);
 	struct ir_instruction *instruction = ir_instruction(IR_COPY);
 
-	/**
-	 * The value of the left side of this operation will be the same as the value of the
-	 * last instruction's left operand, which will be operand[1].  The right side is the
-	 * evaluated expression, whose value is stored in prev_instruction's operand[0]
-	*/
-	struct ir_instruction *prev_instruction = binary_operation->ir->last;
 	// This is the result
-	ir_operand_copy(instruction, 1, &prev_instruction->operands[0]);
+	ir_operand_copy(instruction, 1, &binary_operation->ir->last->operands[0]);
 
-	// We'll have to hop back some number of instructions to find the ADDRESS_OF.  That
-	// number depends on a few conditions
-	int hops = 2;
-
-	// If the left side's a pointer, step back two
-	if(type_get_from_node(binary_operation->data.binary_operation.left_operand)->kind == TYPE_POINTER)
-	{
-		hops += 2;
-	}
-
-	// If the right side's an identifier, there will be another instruction to step over
-	if(binary_operation->data.binary_operation.right_operand->kind == NODE_IDENTIFIER)
-	{
-		hops += 2;
-		// If the right side's got a pointer, step back another two
-		if (type_get_from_node(binary_operation->data.binary_operation.right_operand)->kind == TYPE_POINTER)
-		{
-			hops += 2;
-		}
-	}
-
-	int i;
-	for(i = 0; i < hops; i++)
-	{
-		prev_instruction = prev_instruction->prev;
-	}
-	ir_operand_copy(instruction, 0, &prev_instruction->operands[0]);
-
+	struct node *id_node = ir_get_id(binary_operation->data.binary_operation.left_operand);
+	ir_generate_for_identifier(id_node);
+	binary_operation->ir = ir_concatenate(binary_operation->ir, id_node->ir);
+	ir_operand_copy(instruction, 0, &binary_operation->ir->last->operands[0]);
 
 	ir_append(binary_operation->ir, instruction);
 
@@ -434,6 +511,16 @@ void ir_generate_for_compound_assignment(int kind, struct node *binary_operation
 
 }
 
+/* ir_generate_for_unary_operation - part multi-way branch, but also directly 
+ *  handles & and *
+ *
+ * Parameters: 
+ *   unary_operation - node - contains the operation and operand 
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 void ir_generate_for_unary_operation(struct node *unary_operation) {
 	  assert(NODE_UNARY_OPERATION == unary_operation->kind);
 	  ir_generate_for_expression(unary_operation->data.unary_operation.operand);
@@ -460,11 +547,14 @@ void ir_generate_for_unary_operation(struct node *unary_operation) {
 	    	struct ir_operand *op = node_get_result(id_node)->ir_operand;
 	    	op = ir_convert_l_to_r(op, unary_operation->ir, unary_operation->data.unary_operation.operand);
 
-	    	struct ir_instruction *instruction2 = ir_instruction(IR_LOAD_WORD);
-	    	ir_operand_temporary(instruction2, 0);
-	    	ir_operand_copy(instruction2, 1, op);
-	    	ir_append(unary_operation->ir, instruction2);
-	    	unary_operation->data.unary_operation.result.ir_operand = &instruction2->operands[0];
+	    	/* This should actually return an lvalue.  The second load word would be accomplished by
+	    	 * the expression containing the indirected pointer
+	    	 */
+//	    	struct ir_instruction *instruction2 = ir_instruction(IR_LOAD_WORD);
+//	    	ir_operand_temporary(instruction2, 0);
+//	    	ir_operand_copy(instruction2, 1, op);
+//	    	ir_append(unary_operation->ir, instruction2);
+	    	unary_operation->data.unary_operation.result.ir_operand = &unary_operation->ir->last->operands[0];
 	    	break;
 
 	    case OP_AMPERSAND:
@@ -480,7 +570,17 @@ void ir_generate_for_unary_operation(struct node *unary_operation) {
 	  }
 }
 
-void ir_generate_for_log_and_or(struct node *binary_operation, int or) {
+/* ir_generate_for_log_and_or - adds instructions for logical operations 
+ *
+ * Parameters: 
+ *   binary_operation - node - contains the operands
+ *   is_or - int - flag set if this is a || expression 
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
+void ir_generate_for_log_and_or(struct node *binary_operation, int is_or) {
 	ir_generate_for_expression(binary_operation->data.binary_operation.left_operand);
 	binary_operation->ir = binary_operation->data.binary_operation.left_operand->ir;
 	struct ir_operand *left_op = node_get_result(binary_operation->data.binary_operation.left_operand)->ir_operand;
@@ -494,7 +594,7 @@ void ir_generate_for_log_and_or(struct node *binary_operation, int or) {
 
 	// Set the GOTO kind, based on && or ||
 	int kind;
-	if (or)
+	if (is_or)
 		kind = IR_GOTO_IF_FALSE;
 	else
 		kind = IR_GOTO_IF_TRUE;
@@ -525,6 +625,13 @@ void ir_generate_for_log_and_or(struct node *binary_operation, int or) {
 	binary_operation->data.binary_operation.result.ir_operand = &result_instruction->operands[0];
 }
 
+/* ir_generate_for_binary_operation - just a multi-way branch based on operation type 
+ *
+ * Parameters: 
+ *   binary_operation - node - contains the operation and operands
+ *
+ *
+ */
 void ir_generate_for_binary_operation(struct node *binary_operation) {
   assert(NODE_BINARY_OPERATION == binary_operation->kind);
 
@@ -643,7 +750,15 @@ void ir_generate_for_binary_operation(struct node *binary_operation) {
   }
 }
 
-/*Todo dig up mysterious instruction value */
+/* ir_generate_for_ternary_operation - evaluation and flow control for ternary operations
+ *
+ * Parameters: 
+ *   expression - node - contains the operation 
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 void ir_generate_for_ternary_operation(struct node *expression) {
 	ir_generate_for_expression(expression->data.ternary_operation.log_expr);
 	expression->ir = ir_copy(expression->data.ternary_operation.log_expr->ir);
@@ -703,6 +818,15 @@ void ir_generate_for_ternary_operation(struct node *expression) {
 	expression->data.ternary_operation.result.ir_operand = &store_instruction->operands[0];
 }
 
+/* ir_generate_for_cast - adds instructions for cast expressions
+ *
+ * Parameters: 
+ *   cast - node - contains the operation 
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 void ir_generate_for_cast(struct node *cast) {
 	ir_generate_for_expression(cast->data.cast.cast);
 	cast->ir = ir_copy(cast->data.cast.cast->ir);
@@ -761,8 +885,16 @@ void ir_generate_for_cast(struct node *cast) {
 	cast->data.cast.result.ir_operand = &instruction->operands[0];
 }
 
-/* TODO if implicit cast, cast for the operation, but not for the assignment */
-void ir_generate_for_postfix(struct node *expression, int is_post) {
+/* ir_generate_for_postfix - adds instructions for pre- and postfix expressions
+ *
+ * Parameters: 
+ *   expression - node - contains the operation 
+ *   is_post - int - flag set if expression is postfix (rather than prefix)
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */void ir_generate_for_postfix(struct node *expression, int is_post) {
 	struct ir_operand *address_op;
 	struct ir_operand *op;
 
@@ -800,7 +932,16 @@ void ir_generate_for_postfix(struct node *expression, int is_post) {
 	ir_operand_temporary(load_instruction, 0);
 	load_instruction->operands[1].kind = OPERAND_NUMBER;
 	load_instruction->operands[1].data.number = 1;
+	struct ir_operand *addend = &load_instruction->operands[0];
 	ir_append(expression->ir, load_instruction);
+
+	struct type *type = type_get_from_node(expression);
+	  if(type->kind == TYPE_POINTER)
+	  {
+		  {
+			  addend = ir_pointer_arithmetic_conversion(type, expression->ir, addend);
+		  }
+	  }
 
 	// Add or subtract
 	int kind;
@@ -821,7 +962,7 @@ void ir_generate_for_postfix(struct node *expression, int is_post) {
 
 	struct ir_instruction *oper_instruction = ir_instruction(kind);
 	ir_operand_temporary(oper_instruction, 0);
-	ir_operand_copy(oper_instruction, 1, &load_instruction->operands[0]);
+	ir_operand_copy(oper_instruction, 1, addend);
 	ir_operand_copy(oper_instruction, 2, op);
 	ir_append(expression->ir, oper_instruction);
 
@@ -835,11 +976,20 @@ void ir_generate_for_postfix(struct node *expression, int is_post) {
 		expression->data.prefix.result.ir_operand = &oper_instruction->operands[0];
 }
 
+/* ir_generate_for_function_call - generates up to four IR_PARAMETER instructions 
+ *  one IR_FUNCTION_CALL and up to one IR_RESULT_WORD/BYTE 
+ *
+ * Parameters: 
+ *   call - node - contains the function call expression 
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 void ir_generate_for_function_call(struct node *call) {
 	struct node *list_node = call->data.function_call.args;
 	struct ir_instruction *pass_arg;
 	int arg_num = 0;
-//	struct ir_instruction *instruction = ir_instruction(IR_NO_OPERATION);
 	struct ir_section *ir;
 	while(list_node != NULL)
 	{
@@ -858,7 +1008,8 @@ void ir_generate_for_function_call(struct node *call) {
 
 	if(arg_num > 3)
 	{
-		/*TODO ERROR - Sorry, must have four or fewer arguments */
+		ir_generation_num_errors++;
+		printf("ERROR - Functions can't take more than four arguments.\n");
 	}
 
 	struct ir_instruction *function_instruction = ir_instruction(IR_FUNCTION_CALL);
@@ -888,6 +1039,15 @@ void ir_generate_for_function_call(struct node *call) {
 	call->ir = ir;
 }
 
+/* ir_generate_for_comma_list - calls generate_for_expression for each item in list
+ *
+ * Parameters: 
+ *   comma_list - node - contains the comma list 
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 void ir_generate_for_comma_list(struct node *comma_list) {
 	ir_generate_for_expression(comma_list->data.comma_list.data);
 	comma_list->ir = ir_copy(comma_list->data.comma_list.data->ir);
@@ -900,9 +1060,17 @@ void ir_generate_for_comma_list(struct node *comma_list) {
 		ir_concatenate(comma_list->ir, comma_list->data.comma_list.data->ir);
 		comma_list = comma_list->data.comma_list.next;
 	}
-	/*TODO set result.ir_operand - also create result field*/
 }
 
+/* ir_generate_for_expression - multi-way branch for all expressions that generate ir 
+ *
+ * Parameters: 
+ *   expression - node - contains the expression 
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 void ir_generate_for_expression(struct node *expression) {
   switch (expression->kind) {
     case NODE_IDENTIFIER:
@@ -954,19 +1122,33 @@ void ir_generate_for_expression(struct node *expression) {
   }
 }
 
+/* ir_generate_for_expression_statement - passes contents to generate_for_expression
+ *
+ * Parameters: 
+ *   expression - node - contains the statement 
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
 void ir_generate_for_expression_statement(struct node *expression_statement) {
   struct ir_instruction *instruction;
   struct node *expression = expression_statement->data.expression_statement.expression;
   assert(NODE_EXPRESSION_STATEMENT == expression_statement->kind);
   ir_generate_for_expression(expression);
 
-//  instruction = ir_instruction(IR_PRINT_NUMBER);
-//  ir_operand_copy(instruction, 0, node_get_result(expression)->ir_operand);
-
   expression_statement->ir = ir_copy(expression_statement->data.expression_statement.expression->ir);
-//  ir_append(expression_statement->ir, instruction);
 }
 
+/* ir_generate_for_statement_list - calls generate for statement for each statement in list
+ *
+ * Parameters: 
+ *   statement_list - node - contains the statements
+ *   function_name - char[] - needed for user labels
+ *   cont - ir_instruction - instruction with label for continue statements
+ *   brk - ir_instruction - instruction with label for break statements
+ *
+ */
 void ir_generate_for_statement_list(struct node *statement_list, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk) {
   struct node *init = statement_list->data.statement_list.init;
   struct node *statement = statement_list->data.statement_list.statement;
@@ -987,6 +1169,17 @@ void ir_generate_for_statement_list(struct node *statement_list, char function_n
   }
 }
 
+/* ir_generate_for_labeled_statement - prepends user label to include function name
+ *
+ * Parameters: 
+ *   statement - node - contains the statement
+ *   function_name - char[] - prepended to labels for function-level uniqueness
+ *   cont - ir_instruction - instruction with label for continue statements
+ *   brk - ir_instruction - instruction with label for break statements
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 void ir_generate_for_labeled_statement(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk) {
 	char *label_name = statement->data.labeled_statement.id->data.identifier.name;
 	char *str_buf = malloc(256);
@@ -1001,6 +1194,17 @@ void ir_generate_for_labeled_statement(struct node *statement, char function_nam
 	statement->ir = ir;
 }
 
+/* ir_generate_for_compound - calls generate for statement list
+ *
+ * Parameters: 
+ *   statement - node - contains the statement
+ *   function_name - char[] - needed for user labels
+ *   cont - ir_instruction - instruction with label for continue statements
+ *   brk - ir_instruction - instruction with label for break statements
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 void ir_generate_for_compound(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk) {
   assert(NODE_COMPOUND == statement->kind);
   if(statement->data.compound.statement_list != NULL)
@@ -1012,6 +1216,17 @@ void ir_generate_for_compound(struct node *statement, char function_name[], stru
 	  statement->ir = NULL;
 }
 
+/* ir_generate_for_conditional - flow control for if/if-else statements
+ *
+ * Parameters: 
+ *   statement - node - contains the statement
+ *   function_name - char[] - needed for user labels
+ *   cont - ir_instruction - instruction with label for continue statements
+ *   brk - ir_instruction - instruction with label for break statements
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 void ir_generate_for_conditional(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk) {
 	ir_generate_for_expression(statement->data.conditional.expr);
 	struct ir_section *ir = ir_copy(statement->data.conditional.expr->ir);
@@ -1056,6 +1271,17 @@ void ir_generate_for_conditional(struct node *statement, char function_name[], s
 	statement->ir = ir;
 }
 
+/* ir_generate_for_for - flow control for for statements
+ *
+ * Parameters: 
+ *   statement - node - contains the statement
+ *   function_name - char[] - needed for user labels
+ *   cont - ir_instruction - instruction with label for continue statements
+ *   brk - ir_instruction - instruction with label for break statements
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 void ir_generate_for_for(struct node *statement, char function_name[]) {
 	assert(statement->kind == NODE_WHILE);
 	assert(statement->data.while_loop.expr->kind == NODE_FOR);
@@ -1111,6 +1337,17 @@ void ir_generate_for_for(struct node *statement, char function_name[]) {
 	ir_append(statement->ir, break_label);
 }
 
+/* ir_generate_for_while - flow control for while and do-while
+ *  generate for for.  These statements produce the break and 
+ *  continue instructions needed in all other statements.
+ *
+ * Parameters: 
+ *   statement - node - contains the statement
+ *   function_name - char[] - needed for user labels
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 void ir_generate_for_while(struct node *statement, char function_name[]) {
 	struct ir_instruction *continue_label = ir_instruction(IR_LABEL);
 	struct ir_instruction *break_label = ir_instruction(IR_LABEL);
@@ -1119,9 +1356,7 @@ void ir_generate_for_while(struct node *statement, char function_name[]) {
 
 	switch (statement->data.while_loop.type)
 	{
-	// WHILE - branch to the loop condition needs to go before the beginning of 
-  // the expression, since any of the contents of that expression could
-  // have changed inside the loop. 
+	// WHILE 
 		case 0:
 			ir_operand_label(continue_label, 0);
 			statement->ir = ir_append(statement->ir, continue_label);
@@ -1189,6 +1424,18 @@ void ir_generate_for_while(struct node *statement, char function_name[]) {
 	}
 }
 
+/* ir_generate_for_jump - goto, continue and break generate instructions for branches
+ *   return adds either a return or return null instruction
+ *
+ * Parameters: 
+ *   statement - node - contains the statement
+ *   function_name - char[] - needed for user labels
+ *   cont - ir_instruction - instruction with label for continue statements
+ *   brk - ir_instruction - instruction with label for break statements
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 void ir_generate_for_jump(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk) {
 	struct ir_instruction *branch_instruction = ir_instruction(IR_GOTO);
 	switch (statement->data.jump.type) {
@@ -1208,7 +1455,9 @@ void ir_generate_for_jump(struct node *statement, char function_name[], struct i
 	      {
 	    	  /*ERROR - nothing to continue */
 	    	  ir_generation_num_errors++;
-	    	  printf("ERROR - Cannot continue outside of loop.");
+	    	  printf("ERROR - Cannot continue outside of loop.\n");
+	    	  struct ir_instruction *nothing = ir_instruction(IR_NO_OPERATION);
+	    	  statement->ir = ir_append(statement->ir, nothing);
 	      }
 	      else
 	      {
@@ -1224,7 +1473,9 @@ void ir_generate_for_jump(struct node *statement, char function_name[], struct i
 	      {
 	    	  /*ERROR - nothing to break out of */
 	    	  ir_generation_num_errors++;
-	    	  printf("ERROR - Cannot break from outside of loop.");
+	    	  printf("ERROR - Cannot break from outside of loop.\n");
+	    	  struct ir_instruction *nothing = ir_instruction(IR_NO_OPERATION);
+	    	  statement->ir = ir_append(statement->ir, nothing);
 	      }
 	      else
 	      {
@@ -1261,11 +1512,23 @@ void ir_generate_for_jump(struct node *statement, char function_name[], struct i
 	  }
 }
 
+/* ir_set_symbol_table_offsets - helper function that walks through symbol
+ *   table and sets identifiers' offsets 
+ *
+ * Parameters: 
+ *   table - symbol_table - the calling function's child table 
+ *   overhead - int - space on the stack already occupied
+ * 
+ * Returns an integer that is the number of bytes needed for the stack frame
+ */
 int ir_set_symbol_table_offsets(struct symbol_table *table, int overhead){
 	// Borrowed from symbol table print function
 	  struct symbol_list *iter;
+
 	  for (iter = table->variables; NULL != iter; iter = iter->next) {
 	    int size = 4;
+//	    if (iter->symbol.result == NULL)
+//	    	break;
 	    if(iter->symbol.result.type->kind == TYPE_BASIC)
 	    {
 	    	if(iter->symbol.result.type->data.basic.width == TYPE_WIDTH_CHAR)
@@ -1341,6 +1604,14 @@ int ir_set_symbol_table_offsets(struct symbol_table *table, int overhead){
 	  return overhead;
 }
 
+/* ir_get_name - helper for function_definition, just grabs the function name 
+ *   from which ever type of node holds it
+ *
+ * Parameters:
+ *   declarator - node - some kind of declarator node 
+ *
+ * Returns a "string" with function name, if found
+ */
 char *ir_get_name(struct node *declarator) {
 	switch (declarator->kind)
 	{
@@ -1358,6 +1629,15 @@ char *ir_get_name(struct node *declarator) {
 	}
 }
 
+/* ir_generate_for_function_definition - sets symbol table offsets, gets function
+ *   name, generates proc_begin and proc_end and calls generate for statement
+ *
+ * Parameters: 
+ *   statement - node - contains the function definition
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ */
 void ir_generate_for_function_definition(struct node *statement) {
 	// Get symbol table from function's identifier's symbol
 	struct type *type = node_get_result(statement->data.function_definition.declarator)->type;
@@ -1390,10 +1670,10 @@ void ir_generate_for_function_definition(struct node *statement) {
 /* symbol_add_from_statement - just like add_from_expression, but for statements
  *
  * Parameters:
- *        parent_table - symobol_table - the old table
- *        child_table - symobol_table - the new table
- *        statement - node - a node containing the statement
- *
+ *   statement - node - a node containing the statement
+ *   function_name - char[] - needed for user labels
+ *   cont - ir_instruction - instruction with label for continue statements
+ *   brk - ir_instruction - instruction with label for break statements
  */
 void ir_generate_for_statement(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk) {
   assert(NULL != statement);
@@ -1429,12 +1709,22 @@ void ir_generate_for_statement(struct node *statement, char function_name[], str
       ir_generate_for_expression_statement(statement);
       break;
     default:
-      printf("%d\n",statement->kind);
       assert(0);
       break;
   }
+
+  if(statement->ir == NULL)
+  {
+	 struct ir_intstruction *nothing = ir_instruction(IR_NO_OPERATION);
+	 statement->ir = ir_append(statement->ir, nothing);
+  }
 }
 
+/* ir_generate_for_translation_unit - calls generate for statement for each node
+ *
+ * Parameters:
+ *    unit - node - the whole, dern program
+ */
 void ir_generate_for_translation_unit(struct node *unit) {
   assert(NODE_TRANSLATION_UNIT == unit->kind);
   struct node *init = unit->data.translation_unit.decl;

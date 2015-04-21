@@ -557,18 +557,18 @@ void symbol_add_from_compound(struct symbol_table *parent_table, struct symbol_t
   /* If we return from processing the inner statements and find no new symbols, destroy the
    * new table.
    */
-  if (child_table->variables == NULL && child_table->children == NULL)
-  {
-	  parent_table->children->child = parent_table->children->next;
-	  free(child_table);
-	  child_table = NULL;
-  }
-
-  if(parent_table->children->child == NULL)
-  {
-	  free(parent_table->children);
-	  parent_table->children = NULL;
-  }
+//  if (child_table->variables == NULL && child_table->children == NULL)
+//  {
+//	  parent_table->children->child = parent_table->children->next;
+//	  free(child_table);
+//	  child_table = NULL;
+//  }
+//
+//  if(parent_table->children->child == NULL)
+//  {
+//	  free(parent_table->children);
+//	  parent_table->children = NULL;
+//  }
 }
 
 /* symbol_add_from_jump - totally unnecessary except that returns might be 

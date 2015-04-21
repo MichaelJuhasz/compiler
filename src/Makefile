@@ -63,3 +63,11 @@ typeCheck:
 errorTest:
 
 	./compiler -s type < errorTest2.c
+
+irErrorTest:
+
+	./compiler -s ir < errorTest3.c
+
+generateIR:
+
+	./compiler -s ir < Test4.c
