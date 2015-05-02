@@ -282,18 +282,14 @@ int type_is_scalar(struct type *t) {
 int type_is_lvalue(struct node *node) {
 	if(node->kind != NODE_IDENTIFIER)
 	{
-		// This condition will be met iff the left side is an element of an array
-		if(node->kind == NODE_UNARY_OPERATION &&
-			  node->data.unary_operation.operand->kind == NODE_BINARY_OPERATION)
-		{
-			return 1;
-		}
 
-		// This condition will be met when the & operator returns a pointer
-		else if(node->kind == NODE_UNARY_OPERATION &&
-				  type_get_from_node(node)->kind == TYPE_POINTER)
+		if(node->kind == NODE_UNARY_OPERATION)
 		{
-			return 1;
+			// This condition will be met iff the left side is an element of an array
+			if(node->data.unary_operation.operand->kind == NODE_BINARY_OPERATION)
+				return 1;
+			else if (node->data.unary_operation.operation == OP_ASTERISK)
+				return 1;
 		}
 
 		else
@@ -591,7 +587,7 @@ void type_convert_simple_assignment(struct node *binary_operation) {
  *   Memory may be allocated on the heap.
  */
 void type_convert_compound_assignment(struct node *binary_operation) {
-	if(binary_operation->data.binary_operation.left_operand->kind != NODE_IDENTIFIER)
+	if(!type_is_lvalue(binary_operation->data.binary_operation.left_operand))
 	{
 		  type_checking_num_errors++;
 		  printf("ERROR: line %d - Can't assign to r-value.\n", binary_operation->line_number);
@@ -1111,12 +1107,12 @@ struct type *type_assign_in_conditional(struct node *conditional, struct type *r
   if(conditional->data.conditional.else_statement != NULL)
   {
 	  else_type = type_assign_in_statement(conditional->data.conditional.else_statement, return_type);
-	  if(if_type == NULL || if_type != else_type)
-		  return NULL;
-	  else
-		  return if_type;
+//	  if(if_type == NULL || if_type != else_type)
+//		  return NULL;
+//	  else
+//		  return if_type;
   }
-  else
+//  else
 	  return if_type;
 }
 

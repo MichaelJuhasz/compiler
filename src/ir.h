@@ -81,6 +81,12 @@ struct ir_operand {
 #define IR_SUBU                    50
 #define IR_MULU                    51
 #define IR_DIVU                    52
+#define IR_LOAD_BYTE_U             53
+#define IR_LOAD_HALF_WORD_U        54
+#define IR_STORE_BYTE              55
+#define IR_STORE_HALF_WORD         56
+#define IR_STORE_WORD              57
+#define IR_SEQUENCE_PT             58
 
 struct ir_instruction {
   int kind;
@@ -94,8 +100,11 @@ struct ir_section {
 
 void ir_print_section(FILE *output, struct ir_section *section);
 void ir_generate_for_translation_unit(struct node *node);
+struct ir_operand *ir_convert_to_zero_one(struct ir_operand *result, struct ir_section *ir, int is_log_not);
 
 
 extern FILE *error_output;
 extern int ir_generation_num_errors;
+extern char *string_labels[1000];
+extern int string_labels_len;
 #endif

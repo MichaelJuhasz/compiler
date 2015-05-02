@@ -10,6 +10,7 @@
 
 int ir_generation_num_errors;
 char *string_labels[1000];
+int string_labels_len = 0;
 
 /************************
  * CREATE IR STRUCTURES *
@@ -122,6 +123,7 @@ static void ir_operand_string(struct ir_instruction *instruction, int position, 
 		printf("ERROR - Too many strings!\n");
 	}
 	string_labels[str_count] = string->data.string.contents;
+	string_labels_len++;
 	instruction->operands[position].data.label_name = malloc(256);
 	sprintf(instruction->operands[position].data.label_name,"_StringLabel_%d", str_count++);
 	instruction->operands[position].kind = OPERAND_LABEL;
@@ -183,6 +185,48 @@ struct ir_operand *ir_pointer_arithmetic_conversion(struct type *type, struct ir
 }
 
 
+struct node *ir_get_id(struct node *node) {
+	switch(node->kind)
+	{
+	case NODE_IDENTIFIER:
+		return node;
+	case NODE_UNARY_OPERATION:
+		return ir_get_id(node->data.unary_operation.operand);
+	case NODE_BINARY_OPERATION:
+		return ir_get_id(node->data.binary_operation.left_operand);
+	case NODE_POSTFIX:
+		return ir_get_id(node->data.postfix.expr);
+	case NODE_PREFIX:
+		return ir_get_id(node->data.prefix.expr);
+	case NODE_CAST:
+		return ir_get_id(node->data.cast.cast);
+	case NODE_COMMA_LIST:
+		return ir_get_id(node->data.comma_list.data);
+	default:
+		assert(0);
+		return NULL;
+	}
+}
+
+int ir_get_id_size(struct node *id_node) {
+	struct type *type = type_get_from_node(id_node);
+	int size = IR_STORE_WORD;
+	if(type->kind == TYPE_BASIC)
+	{
+		if(type->data.basic.width == TYPE_WIDTH_CHAR)
+	 	{
+ 			size = IR_STORE_BYTE;
+		}
+
+ 		if(type->data.basic.width == TYPE_WIDTH_SHORT)
+ 		{
+ 			size = IR_STORE_HALF_WORD;
+ 		}
+ 	}
+	return size;
+}
+
+
 /*******************************
  * GENERATE IR FOR EXPRESSIONS *
  *******************************/
@@ -233,8 +277,10 @@ void ir_generate_for_string(struct node *string) {
  *   Memory may be allocated on the heap.
  *
  */
+ /* TODO pointer to array multiplies by array size times type width! */
  struct ir_operand *ir_convert_l_to_r(struct ir_operand *operand, struct ir_section *ir, struct node *id_node) {
 	int width = 0;
+	int is_unsigned = false;
 	int kind;
 
 	// Probably not the best way to deal with this...
@@ -246,7 +292,11 @@ void ir_generate_for_string(struct node *string) {
 	if(id_node->kind == NODE_IDENTIFIER)
 	{
 		if(id_node->data.identifier.symbol->result.type->kind == TYPE_BASIC)
+		{
 			width = id_node->data.identifier.symbol->result.type->data.basic.width;
+			is_unsigned = id_node->data.identifier.symbol->result.type->data.basic.is_unsigned;
+		}
+
 		else
 			width = TYPE_WIDTH_POINTER;
 	}
@@ -281,13 +331,19 @@ void ir_generate_for_string(struct node *string) {
 	switch (width)
 	{
 	case TYPE_WIDTH_CHAR:
-		kind = IR_LOAD_BYTE;
+		if(is_unsigned)
+			kind = IR_LOAD_BYTE_U;
+		else
+			kind = IR_LOAD_BYTE;
 		break;
 	case TYPE_WIDTH_SHORT:
-		kind = IR_LOAD_HALF_WORD;
+		if(is_unsigned)
+			kind = IR_LOAD_HALF_WORD_U;
+		else
+			kind = IR_LOAD_HALF_WORD;
 		break;
 	default:
-		kind = IR_LOAD_WORD;
+			kind = IR_LOAD_WORD;
 		break;
 	}
 	struct ir_instruction *new_instruction = ir_instruction(kind);
@@ -344,13 +400,14 @@ void ir_generate_for_arithmetic_binary_operation(int kind, struct node *binary_o
   assert(NODE_BINARY_OPERATION == binary_operation->kind);
 
   ir_generate_for_expression(binary_operation->data.binary_operation.left_operand);
+  struct ir_operand *left_op = node_get_result(binary_operation->data.binary_operation.left_operand)->ir_operand;
+
   ir_generate_for_expression(binary_operation->data.binary_operation.right_operand);
+  struct ir_operand *right_op = node_get_result(binary_operation->data.binary_operation.right_operand)->ir_operand;
 
   binary_operation->ir = ir_concatenate(binary_operation->data.binary_operation.left_operand->ir,
                                         binary_operation->data.binary_operation.right_operand->ir);
 
-  struct ir_operand *left_op = node_get_result(binary_operation->data.binary_operation.left_operand)->ir_operand;
-  struct ir_operand *right_op = node_get_result(binary_operation->data.binary_operation.right_operand)->ir_operand;
   struct type *left_type = type_get_from_node(binary_operation->data.binary_operation.left_operand);
   struct type *right_type = type_get_from_node(binary_operation->data.binary_operation.right_operand);
   int left_kind = 0;
@@ -443,43 +500,23 @@ void ir_generate_for_simple_assignment(struct node *binary_operation) {
 
   left = binary_operation->data.binary_operation.left_operand;
 
-  instruction = ir_instruction(IR_COPY);
+  struct type *type = type_get_from_node(left);
+  int size = ir_get_id_size(left);
+  instruction = ir_instruction(size);
 
   if (left->kind != NODE_CAST){
  	  ir_generate_for_expression(left);
  	  binary_operation->ir = ir_concatenate(binary_operation->ir, left->ir);
- 	  ir_operand_copy(instruction, 0, node_get_result(left)->ir_operand);
+ 	  ir_operand_copy(instruction, 1, node_get_result(left)->ir_operand);
    }
 
-  ir_operand_copy(instruction, 1, op);
+  ir_operand_copy(instruction, 0, op);
 
   ir_append(binary_operation->ir, instruction);
 
   binary_operation->data.binary_operation.result.ir_operand = &instruction->operands[0];
 }
 
-struct node *ir_get_id(struct node *node) {
-	switch(node->kind)
-	{
-	case NODE_IDENTIFIER:
-		return node;
-	case NODE_UNARY_OPERATION:
-		return ir_get_id(node->data.unary_operation.operand);
-	case NODE_BINARY_OPERATION:
-		return ir_get_id(node->data.binary_operation.left_operand);
-	case NODE_POSTFIX:
-		return ir_get_id(node->data.postfix.expr);
-	case NODE_PREFIX:
-		return ir_get_id(node->data.prefix.expr);
-	case NODE_CAST:
-		return ir_get_id(node->data.cast.cast);
-	case NODE_COMMA_LIST:
-		return ir_get_id(node->data.comma_list.data);
-	default:
-		assert(0);
-		return NULL;
-	}
-}
 
 /* ir_generate_for_compound - feeds operands to generate_for_binary and
  *  grabs the result and the address from the binary operation instructions 
@@ -492,23 +529,34 @@ struct node *ir_get_id(struct node *node) {
  *   Memory may be allocated on the heap.
  *
  */
-/* TODO if implicit cast, cast for the operation, but not for the assignment */
 void ir_generate_for_compound_assignment(int kind, struct node *binary_operation) {
 	ir_generate_for_arithmetic_binary_operation(kind, binary_operation);
-	struct ir_instruction *instruction = ir_instruction(IR_COPY);
-
 	// This is the result
-	ir_operand_copy(instruction, 1, &binary_operation->ir->last->operands[0]);
+	struct ir_operand *result_op = &binary_operation->ir->last->operands[0];
 
 	struct node *id_node = ir_get_id(binary_operation->data.binary_operation.left_operand);
 	ir_generate_for_identifier(id_node);
 	binary_operation->ir = ir_concatenate(binary_operation->ir, id_node->ir);
-	ir_operand_copy(instruction, 0, &binary_operation->ir->last->operands[0]);
+
+	// Determine the size for the store
+	int size = ir_get_id_size(id_node);
+
+	struct ir_instruction *instruction = ir_instruction(size);
+
+	ir_operand_copy(instruction, 1, &binary_operation->ir->last->operands[0]);
+	ir_operand_copy(instruction, 0, result_op);
 
 	ir_append(binary_operation->ir, instruction);
 
 	binary_operation->data.binary_operation.result.ir_operand = &instruction->operands[0];
+}
 
+void ir_generate_for_logical_not(struct node *unary_operation) {
+	struct ir_operand *result = node_get_result(unary_operation->data.unary_operation.operand)->ir_operand;
+	result = ir_convert_l_to_r(result, unary_operation->ir, unary_operation->data.unary_operation.operand);
+	result = ir_convert_to_zero_one(result, unary_operation->ir, 1);
+
+	unary_operation->data.unary_operation.result.ir_operand = result;
 }
 
 /* ir_generate_for_unary_operation - part multi-way branch, but also directly 
@@ -529,7 +577,7 @@ void ir_generate_for_unary_operation(struct node *unary_operation) {
 
 	  switch (unary_operation->data.unary_operation.operation) {
 	    case OP_EXCLAMATION:
-	    	ir_generate_for_numeric_unary(IR_LOG_NOT, unary_operation);
+	    	ir_generate_for_logical_not(unary_operation);
 	    	break;
 	    case OP_PLUS:
 	    	ir_generate_for_numeric_unary(IR_MAKE_POSITIVE, unary_operation);
@@ -570,6 +618,53 @@ void ir_generate_for_unary_operation(struct node *unary_operation) {
 	  }
 }
 
+struct ir_operand *ir_convert_to_zero_one(struct ir_operand *result, struct ir_section *ir, int is_log_not) {
+	// Resulting value must be 1 or 0, rather than "true" or "false"
+	// The 0 or 1 will be stored in this temporary
+	struct ir_instruction *real_result = ir_instruction(IR_LOAD_IMMEDIATE);
+	ir_operand_temporary(real_result, 0);
+
+	// This same logic basically applies to logical not, but goto must be reversed
+	int kind = IR_GOTO_IF_TRUE;
+	if(is_log_not)
+		kind = IR_GOTO_IF_FALSE;
+
+	struct ir_instruction *true_or_false = ir_instruction(kind);
+	ir_operand_copy(true_or_false, 0, result);
+	ir_operand_label(true_or_false, 1);
+	ir = ir_append(ir, true_or_false);
+
+	// False (true for log_not)
+	real_result->operands[1].kind = OPERAND_NUMBER;
+	real_result->operands[1].data.number = 0;
+	ir = ir_append(ir, real_result);
+	struct ir_instruction *branch_to_end = ir_instruction(IR_GOTO);
+
+	// Set up the end label
+	struct ir_instruction *end_label = ir_instruction(IR_LABEL);
+	ir_operand_label(end_label, 0);
+
+	// Copy that destination into the goto
+	ir_operand_copy(branch_to_end, 0, &end_label->operands[0]);
+	ir = ir_append(ir, branch_to_end);
+
+	// True (false for log_not)
+	struct ir_instruction *true_label = ir_instruction(IR_LABEL);
+	ir_operand_copy(true_label, 0, &true_or_false->operands[1]);
+	ir = ir_append(ir, true_label);
+
+	struct ir_instruction *other_real_result = ir_instruction(IR_LOAD_IMMEDIATE);
+	ir_operand_copy(other_real_result, 0, &real_result->operands[0]);
+	other_real_result->operands[1].kind = OPERAND_NUMBER;
+	other_real_result->operands[1].data.number = 1;
+	ir = ir_append(ir, other_real_result);
+
+	// End label
+	ir = ir_append(ir, end_label);
+
+	return &real_result->operands[0];
+}
+
 /* ir_generate_for_log_and_or - adds instructions for logical operations 
  *
  * Parameters: 
@@ -580,6 +675,7 @@ void ir_generate_for_unary_operation(struct node *unary_operation) {
  *   Memory may be allocated on the heap.
  *
  */
+ /* TODO result value should be one or zero */
 void ir_generate_for_log_and_or(struct node *binary_operation, int is_or) {
 	ir_generate_for_expression(binary_operation->data.binary_operation.left_operand);
 	binary_operation->ir = binary_operation->data.binary_operation.left_operand->ir;
@@ -617,12 +713,14 @@ void ir_generate_for_log_and_or(struct node *binary_operation, int is_or) {
 	// Jump label
 	struct ir_instruction *label = ir_instruction(IR_LABEL);
 	ir_operand_copy(label, 0, &branch_instruction->operands[1]);
-	binary_operation->ir = ir_append(binary_operation->ir, label); // OK here
+	binary_operation->ir = ir_append(binary_operation->ir, label);
 	ir_operand_copy(other_result, 1, left_op);
 	binary_operation->ir = ir_append(binary_operation->ir, other_result);
 
-	/*TODO how to save the result? */
-	binary_operation->data.binary_operation.result.ir_operand = &result_instruction->operands[0];
+	// Result is either "true" or "false".  It needs to be 1 or 0
+	struct ir_operand *real_result = ir_convert_to_zero_one(&result_instruction->operands[0], binary_operation->ir, 0);
+
+	binary_operation->data.binary_operation.result.ir_operand = real_result;
 }
 
 /* ir_generate_for_binary_operation - just a multi-way branch based on operation type 
@@ -794,22 +892,21 @@ void ir_generate_for_ternary_operation(struct node *expression) {
 
 	goto_instruction = ir_instruction(IR_GOTO);
 	ir_operand_label(goto_instruction, 0);
-	expression->ir = ir_append(expression->ir, goto_instruction); // correct, here
+	expression->ir = ir_append(expression->ir, goto_instruction); 
 
 	// False label
 	struct ir_instruction *first_label = ir_instruction(IR_LABEL);
 	ir_operand_copy(first_label, 0, &branch_instruction->operands[1]);
-	expression->ir = ir_append(expression->ir, first_label); // correct, here
+	expression->ir = ir_append(expression->ir, first_label); 
 
 	// False branch
 	ir_generate_for_expression(expression->data.ternary_operation.cond_expr);
-	expression->ir = ir_concatenate(expression->ir, expression->data.ternary_operation.cond_expr->ir); // correct, here
+	expression->ir = ir_concatenate(expression->ir, expression->data.ternary_operation.cond_expr->ir); 
 	result_op = node_get_result(expression->data.ternary_operation.cond_expr)->ir_operand;
 	result_op = ir_convert_l_to_r(result_op, expression->ir, expression->data.ternary_operation.cond_expr);
 
 	ir_operand_copy(other_store, 1, result_op);
-	expression->ir = ir_append(expression->ir, other_store); // This didn't work.  Or did it?...
-	// Do I need a goto here, too?
+	expression->ir = ir_append(expression->ir, other_store); 
 
 	struct ir_instruction *second_label = ir_instruction(IR_LABEL);
 	ir_operand_copy(second_label, 0, &goto_instruction->operands[0]);
@@ -1629,6 +1726,28 @@ char *ir_get_name(struct node *declarator) {
 	}
 }
 
+//void ir_preserve_across_call(struct ir_section *section) {
+//	struct ir_instruction *instruction = section->last;
+//	struct ir_instruction *inner_instruction;
+//
+//	int dist = 0;
+//
+//	while(instruction != section->first->prev)
+//	{
+//		if(instruction->kind == IR_FUNCTION_CALL)
+//		{
+//			inner_instruction = instruction->prev;
+//			while(inner_instruction->kind != IR_SEQUENCE_PT)
+//			{
+//				inner_instruction = inner_instruction->prev;
+//			}
+//			dist = inner_instruction->operands[0].data.number -
+//
+//		}
+//		instruction = instruction->prev;
+//	}
+//}
+
 /* ir_generate_for_function_definition - sets symbol table offsets, gets function
  *   name, generates proc_begin and proc_end and calls generate for statement
  *
@@ -1656,13 +1775,21 @@ void ir_generate_for_function_definition(struct node *statement) {
 	struct ir_instruction *proc_begin = ir_instruction(IR_PROC_BEGIN);
 	proc_begin->operands[0].kind = OPERAND_LABEL;
 	proc_begin->operands[0].data.label_name = function_name;
+	proc_begin->operands[1].kind = OPERAND_NUMBER;
+	proc_begin->operands[1].data.number = overhead;
+	proc_begin->operands[2].kind = OPERAND_NUMBER;
+	proc_begin->operands[2].data.number = type->data.func.num_params;
 	statement->ir = ir_section(proc_begin, proc_begin);
 
 	ir_generate_for_statement(statement->data.function_definition.compound, function_name, NULL, NULL);
 	statement->ir = ir_concatenate(statement->ir, statement->data.function_definition.compound->ir);
 
+//	ir_preserve_across_call(statement->ir);
+
 	struct ir_instruction *proc_end = ir_instruction(IR_PROC_END);
 	ir_operand_copy(proc_end, 0, &proc_begin->operands[0]);
+	ir_operand_copy(proc_end, 1, &proc_begin->operands[1]);
+
 
 	ir_append(statement->ir, proc_end);
 }
@@ -1678,6 +1805,7 @@ void ir_generate_for_function_definition(struct node *statement) {
 void ir_generate_for_statement(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk) {
   assert(NULL != statement);
   struct ir_instruction *dummy_instruction;
+  struct ir_instruction *sequence_point = ir_instruction(IR_SEQUENCE_PT);
   switch (statement->kind) {
     case NODE_LABELED_STATEMENT:
       ir_generate_for_labeled_statement(statement, function_name, cont, brk);
@@ -1718,6 +1846,8 @@ void ir_generate_for_statement(struct node *statement, char function_name[], str
 	 struct ir_intstruction *nothing = ir_instruction(IR_NO_OPERATION);
 	 statement->ir = ir_append(statement->ir, nothing);
   }
+  ir_operand_temporary(sequence_point, 0);
+  statement->ir = ir_append(statement->ir, sequence_point);
 }
 
 /* ir_generate_for_translation_unit - calls generate for statement for each node
@@ -1799,6 +1929,12 @@ static void ir_print_opcode(FILE *output, int kind) {
 	"SUBU",
 	"MULU",
 	"DIVU",
+	"LBU",
+	"LHU",
+	"SB",
+	"SH",
+	"SW",
+	"SEQ_PT",
     NULL
   };
 
@@ -1863,8 +1999,13 @@ void ir_print_instruction(FILE *output, struct ir_instruction *instruction) {
     case IR_MAKE_NEGATIVE:
     case IR_MAKE_POSITIVE:
     case IR_LOAD_BYTE:
+    case IR_LOAD_BYTE_U:
     case IR_LOAD_HALF_WORD:
+    case IR_LOAD_HALF_WORD_U:
     case IR_LOAD_WORD:
+    case IR_STORE_WORD:
+    case IR_STORE_HALF_WORD:
+    case IR_STORE_BYTE:
     case IR_ADDRESS_OF:
     case IR_BYTE_TO_HALF_WORD:
     case IR_BYTE_TO_WORD:
@@ -1888,6 +2029,7 @@ void ir_print_instruction(FILE *output, struct ir_instruction *instruction) {
     case IR_RETURN:
     case IR_PROC_BEGIN:
     case IR_PROC_END:
+    case IR_SEQUENCE_PT:
       ir_print_operand(output, &instruction->operands[0]);
       break;
     case IR_NO_OPERATION:

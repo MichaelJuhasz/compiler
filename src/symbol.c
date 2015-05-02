@@ -117,11 +117,20 @@ void symbol_add_from_identifier(struct symbol_table *table, struct node *identif
 		  symbol_table_num_errors++;
 		  printf("ERROR - line %d: Identifier: '%s' has already been declared.\n", identifier->line_number, identifier->data.identifier.name);
 	  }
-	  if (!compare_types(symbol_type, symbol->result.type, identifier->line_number, identifier->data.identifier.name)) {
-		  /* TODO ERROR*/
-		  symbol_table_num_errors++;
+	  else
+	  {
+		  if (!compare_types(symbol_type, symbol->result.type, identifier->line_number, identifier->data.identifier.name))
+		  {
+			  /* TODO ERROR*/
+			  symbol_table_num_errors++;
+		  }
+		  if(symbol_type->data.func.is_definition)
+		  {
+				symbol = symbol_put(table, name);
+				symbol->result.type = symbol_type;
+				identifier->data.identifier.symbol = symbol;
+		  }
 	  }
-
   }
   else identifier->data.identifier.symbol = symbol;
 }
