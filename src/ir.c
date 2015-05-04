@@ -1088,12 +1088,23 @@ void ir_generate_for_function_call(struct node *call) {
 	struct ir_instruction *pass_arg;
 	int arg_num = 0;
 	struct ir_section *ir;
+	char *function_name = call->data.function_call.expression->data.identifier.name;
+
 	while(list_node != NULL)
 	{
 		ir_generate_for_expression(list_node->data.comma_list.data);
 		ir = ir_copy(list_node->data.comma_list.data->ir);
 		struct ir_operand *arg_op = node_get_result(call->data.function_call.args->data.comma_list.data)->ir_operand;
 		arg_op = ir_convert_l_to_r(arg_op, ir, list_node->data.comma_list.data);
+
+		if(strcmp(function_name, "print_number") == 0)
+		{
+			pass_arg = ir_instruction(IR_PRINT_NUMBER);
+			ir_operand_copy(pass_arg, 0, arg_op);
+			ir = ir_append(ir, pass_arg);
+			call->ir = ir;
+			return;
+		}
 
 		pass_arg = ir_instruction(IR_PARAMETER);
 		pass_arg->operands[0].kind = OPERAND_NUMBER;
@@ -1111,7 +1122,7 @@ void ir_generate_for_function_call(struct node *call) {
 
 	struct ir_instruction *function_instruction = ir_instruction(IR_FUNCTION_CALL);
 	function_instruction->operands[0].kind = OPERAND_LABEL;
-	function_instruction->operands[0].data.label_name = call->data.function_call.expression->data.identifier.name;
+	function_instruction->operands[0].data.label_name = function_name;
 	ir_append(ir, function_instruction);
 
 	struct type *return_type = type_get_from_node(call->data.function_call.expression)->data.func.return_type;
@@ -1666,22 +1677,32 @@ int ir_set_symbol_table_offsets(struct symbol_table *table, int overhead){
 	    	}
 	    }
 
-	    // Align halfwords
-	    if(size == 2)
-	    {
-	    	overhead = ((overhead + 1) / 2) * 2;
-	    }
-
-	    // Align words
-	    else if (size == 4)
-	    {
-	    	overhead = ((overhead + 3) / 4) * 4;
-	    }
 
 	    iter->symbol.result.offset = malloc(sizeof(struct ir_operand));
 	    iter->symbol.result.offset->kind = OPERAND_LVALUE;
-	    iter->symbol.result.offset->data.offset = overhead;
-	    overhead += size;
+
+	    if(iter->symbol.result.type->is_param != 1)
+	    {
+		    // Align halfwords
+		    if(size == 2)
+		    {
+		    	overhead = ((overhead + 1) / 2) * 2;
+		    }
+
+		    // Align words
+		    else if (size == 4)
+		    {
+		    	overhead = ((overhead + 3) / 4) * 4;
+		    }
+
+		    iter->symbol.result.offset->data.offset = overhead;
+		    overhead += size;
+	    }
+	    else
+	    {
+		    iter->symbol.result.offset->data.offset = iter->symbol.result.type->param_num * 4;
+	    }
+
 	  }
 
 	  // Now walk through child tables, calling this function recursively and so that
@@ -1764,7 +1785,7 @@ void ir_generate_for_function_definition(struct node *statement) {
 	assert(table != NULL);
 
 	// Each function must save at least 56 bytes on the stack
-	int overhead = 56;
+	int overhead = 88;
 
 	// This function returns the number of bytes needing to be reserved on the stack frame
 	overhead = ir_set_symbol_table_offsets(table, overhead);
@@ -1780,6 +1801,23 @@ void ir_generate_for_function_definition(struct node *statement) {
 	proc_begin->operands[2].kind = OPERAND_NUMBER;
 	proc_begin->operands[2].data.number = type->data.func.num_params;
 	statement->ir = ir_section(proc_begin, proc_begin);
+
+	// Parameter's will need to get the values of the appropriate "a" register
+//	int param_count = 0;
+//	struct symbol_list *iter;
+//	for (iter = table->variables; NULL != iter; iter = iter->next)
+//	{
+//		if(iter->symbol.result.type->is_param == 1)
+//		{
+//			struct ir_instruction *load_param = ir_instruction(IR_LOAD_PARAM);
+//			load_param->operands[0].kind = OPERAND_NUMBER;
+//			load_param->operands[0].data.number = param_count;
+//			// Copy the value of the symbol's offset
+//			ir_operand_copy(load_param, 1, iter->symbol.result.offset);
+//			statement->ir = ir_append(statement->ir, load_param);
+//			param_count++;
+//		}
+//	}
 
 	ir_generate_for_statement(statement->data.function_definition.compound, function_name, NULL, NULL);
 	statement->ir = ir_concatenate(statement->ir, statement->data.function_definition.compound->ir);

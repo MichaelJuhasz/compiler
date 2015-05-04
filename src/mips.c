@@ -166,7 +166,7 @@ void mips_print_load_address (FILE *output, struct ir_instruction *instruction) 
 }
 
 void mips_print_copy(FILE *output, struct ir_instruction *instruction) {
-  fprintf(output, "%10s ", "ori");
+  fprintf(output, "%10s ", "or");
   mips_print_temporary_operand(output, &instruction->operands[0]);
   fputs(", ", output);
   mips_print_temporary_operand(output, &instruction->operands[1]);
@@ -183,7 +183,7 @@ void mips_print_load_immediate(FILE *output, struct ir_instruction *instruction)
 
 void mips_print_print_number(FILE *output, struct ir_instruction *instruction) {
   fprintf(output, "%10s %10s, %10s, %10d\n", "ori", "$v0", "$0", 1);
-  fprintf(output, "%10s %10s, %10s, ", "ori", "$a0", "$0");
+  fprintf(output, "%10s %10s, %10s, ", "or", "$a0", "$0");
   mips_print_temporary_operand(output, &instruction->operands[0]);
   fprintf(output, "\n%10s\n", "syscall");
 }
@@ -243,18 +243,29 @@ void mips_print_proc_end(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s %10s, %10s\n", "lw", "$s2", "24($fp)");
 	fprintf(output, "%10s %10s, %10s\n", "lw", "$s1", "20($fp)");
 	fprintf(output, "%10s %10s, %10s\n", "lw", "$s0", "16($fp)");
-	fprintf(output, "%10s %10s, %10s\n", "lw", "$ra", "52($fp)");
-	fprintf(output, "%10s %10s, %10s\n", "lw", "$fp", "48($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "lw", "$t7", "76($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "lw", "$t6", "72($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "lw", "$t5", "68($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "lw", "$t4", "64($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "lw", "$t3", "60($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "lw", "$t2", "56($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "lw", "$t1", "52($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "lw", "$t0", "48($fp)");
+
+	fprintf(output, "%10s %10s, %10s\n", "lw", "$ra", "84($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "lw", "$fp", "80($fp)");
 	fprintf(output, "%10s %10s, %10s, %10lu\n", "addiu", "$sp", "$sp", instruction->operands[1].data.number);
 	fprintf(output, "%10s %10s\n", "jr", "$ra");
 }
 
 void mips_print_proc_begin(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%s:\n", instruction->operands[0].data.label_name);
-	fprintf(output, "%10s %10s, %10s, %10lu\n", "addiu", "$sp", "$sp", instruction->operands[1].data.number);
-	fprintf(output, "%10s %10s, %10s\n", "sw", "$fp", "48($fp)");
+	int size = instruction->operands[1].data.number;
+	size = 0 - size;
+	fprintf(output, "%10s %10s, %10s, %10d\n", "addiu", "$sp", "$sp", size);
+	fprintf(output, "%10s %10s, %10s\n", "sw", "$fp", "80($sp)");
 	fprintf(output, "%10s %10s, %10s, %10s\n", "or", "$fp", "$sp", "$0");
-	fprintf(output, "%10s %10s, %10s\n", "sw", "$ra", "52($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "sw", "$ra", "84($fp)");
 
 	// Find out the number of params
 	int params = instruction->operands[2].data.number;
@@ -275,6 +286,15 @@ void mips_print_proc_begin(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s %10s, %10s\n", "sw", "$s5", "36($fp)");
 	fprintf(output, "%10s %10s, %10s\n", "sw", "$s6", "40($fp)");
 	fprintf(output, "%10s %10s, %10s\n", "sw", "$s7", "44($fp)");
+
+	fprintf(output, "%10s %10s, %10s\n", "sw", "$t0", "48($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "sw", "$t1", "52($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "sw", "$t2", "56($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "sw", "$t3", "60($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "sw", "$t4", "64($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "sw", "$t5", "68($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "sw", "$t6", "72($fp)");
+	fprintf(output, "%10s %10s, %10s\n", "sw", "$t7", "76($fp)");
 }
 
 void mips_print_instruction(FILE *output, struct ir_instruction *instruction) {

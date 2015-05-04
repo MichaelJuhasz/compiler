@@ -20,6 +20,8 @@ struct node;
 #define TYPE_WIDTH_POINTER  4
 struct type {
   int kind;
+  int is_param;
+  int param_num;
   union {
     struct {
       bool is_unsigned;

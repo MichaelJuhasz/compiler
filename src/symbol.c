@@ -613,7 +613,7 @@ void symbol_add_from_jump(struct symbol_table *table, struct node *jump_node) {
 
 /* symbol_add_from_function_definition - does it all: makes a new symbol table, gets
  * the return type, calls add_from_expression to add the function declaration, adds
- * the parameters to the new symbol table, passes the new table to compound.
+
  *
  * Parameters:
  *        parent_table - symbol_table - the old symbol table
@@ -636,10 +636,12 @@ void symbol_add_from_function_definition(struct symbol_table *parent_table, stru
   symbol_add_from_expression(parent_table, func->data.function_definition.declarator, function_type);
 
   struct node *list_node = func->data.function_definition.declarator->data.function_declarator.params;
+  int param_count = 0;
   while(list_node != NULL)
   {
-	  struct type *param_type = get_symbol_type_from_type_node(list_node->data.comma_list.data->data.parameter_decl.type);
-	  
+	struct type *param_type = get_symbol_type_from_type_node(list_node->data.comma_list.data->data.parameter_decl.type);
+	param_type->is_param = 1;
+	param_type->param_num = param_count++;
 
     /*TODO Store arrays as pointers - after I fix array symbol generation */
     symbol_add_from_expression(child_table, list_node->data.comma_list.data->data.parameter_decl.declarator, param_type);
