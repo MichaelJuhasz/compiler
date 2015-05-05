@@ -1,0 +1,6 @@
+PS5 Description
+Michael Juhasz
+
+This application steps through an ir section representing a program, converts, by way of formatted string printing, the ir instructions to spim instructions and prints these to standard out and to Test5.s, which can be run through a spim simulator.
+
+"Make spimTest" will run through a test program that includes recursive function calls, called within a for loop, whose return values are stored in arrays and later read out of these arrays and printed to the console.  The values produced through these function calls will eventually overflow the limits of my 32-bit words, but this is expected and handled reasonably (i.e. it doesn't blow up the compiler or spim).     

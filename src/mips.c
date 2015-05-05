@@ -187,7 +187,7 @@ void mips_print_arithmetic(FILE *output, struct ir_instruction *instruction, int
  * 		output - FILE - file to print to
  * 		instruction - ir_instruction - the instruction containing the op code and operands
  */
-void mips_print_two_operands(FILE *output, struct ir_instruction *instruction) {
+void mips_print_unary(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s ", mips_kind_to_opcode(instruction->kind));
 	mips_print_temporary_operand(output, &instruction->operands[0]);
 	fputs(", ", output);

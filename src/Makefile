@@ -71,3 +71,7 @@ irErrorTest:
 generateIR:
 
 	./compiler -s ir < Test4.c
+
+spimTest:
+
+	./compiler -o Test5.s < Test5.c
