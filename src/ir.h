@@ -87,6 +87,8 @@ struct ir_operand {
 #define IR_STORE_HALF_WORD         56
 #define IR_STORE_WORD              57
 #define IR_SEQUENCE_PT             58
+#define IR_PRINT_STRING            59
+#define IR_ADDI                    60
 
 struct ir_instruction {
   int kind;

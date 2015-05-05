@@ -408,13 +408,13 @@ void ir_generate_for_arithmetic_binary_operation(int kind, struct node *binary_o
   binary_operation->ir = ir_concatenate(binary_operation->data.binary_operation.left_operand->ir,
                                         binary_operation->data.binary_operation.right_operand->ir);
 
+  left_op = ir_convert_l_to_r(left_op, binary_operation->ir, binary_operation->data.binary_operation.left_operand);
+  right_op = ir_convert_l_to_r(right_op, binary_operation->ir, binary_operation->data.binary_operation.right_operand);
+
   struct type *left_type = type_get_from_node(binary_operation->data.binary_operation.left_operand);
   struct type *right_type = type_get_from_node(binary_operation->data.binary_operation.right_operand);
   int left_kind = 0;
   int right_kind = 0;
-
-  left_op = ir_convert_l_to_r(left_op, binary_operation->ir, binary_operation->data.binary_operation.left_operand);
-  right_op = ir_convert_l_to_r(right_op, binary_operation->ir, binary_operation->data.binary_operation.right_operand);
 
   if(binary_operation->data.binary_operation.left_operand->kind == NODE_IDENTIFIER)
   {
@@ -436,8 +436,8 @@ void ir_generate_for_arithmetic_binary_operation(int kind, struct node *binary_o
   else if(right_kind == TYPE_POINTER)
   {
 	  left_op = ir_pointer_arithmetic_conversion(right_type, binary_operation->ir, left_op);
-
   }
+
   if(left_type == TYPE_BASIC && left_type->data.basic.is_unsigned)
   {
 	  switch(kind)
@@ -593,7 +593,7 @@ void ir_generate_for_unary_operation(struct node *unary_operation) {
 	    	struct node *id_node = unary_operation->data.unary_operation.operand;
 
 	    	struct ir_operand *op = node_get_result(id_node)->ir_operand;
-	    	op = ir_convert_l_to_r(op, unary_operation->ir, unary_operation->data.unary_operation.operand);
+//	    	op = ir_convert_l_to_r(op, unary_operation->ir, unary_operation->data.unary_operation.operand);
 
 	    	/* This should actually return an lvalue.  The second load word would be accomplished by
 	    	 * the expression containing the indirected pointer
@@ -1063,9 +1063,9 @@ void ir_generate_for_cast(struct node *cast) {
 	ir_operand_copy(oper_instruction, 2, op);
 	ir_append(expression->ir, oper_instruction);
 
-	struct ir_instruction *store_instruction = ir_instruction(IR_COPY);
-	ir_operand_copy(store_instruction, 0, address_op);
-	ir_operand_copy(store_instruction, 1, &oper_instruction->operands[0]);
+	struct ir_instruction *store_instruction = ir_instruction(IR_STORE_WORD);
+	ir_operand_copy(store_instruction, 1, address_op);
+	ir_operand_copy(store_instruction, 0, &oper_instruction->operands[0]);
 	ir_append(expression->ir, store_instruction);
 
 	// If prefix, operand gets set after operation is performed
@@ -1100,6 +1100,15 @@ void ir_generate_for_function_call(struct node *call) {
 		if(strcmp(function_name, "print_number") == 0)
 		{
 			pass_arg = ir_instruction(IR_PRINT_NUMBER);
+			ir_operand_copy(pass_arg, 0, arg_op);
+			ir = ir_append(ir, pass_arg);
+			call->ir = ir;
+			return;
+		}
+
+		if(strcmp(function_name, "print_string") == 0)
+		{
+			pass_arg = ir_instruction(IR_PRINT_STRING);
 			ir_operand_copy(pass_arg, 0, arg_op);
 			ir = ir_append(ir, pass_arg);
 			call->ir = ir;
@@ -1635,6 +1644,7 @@ int ir_set_symbol_table_offsets(struct symbol_table *table, int overhead){
 
 	  for (iter = table->variables; NULL != iter; iter = iter->next) {
 	    int size = 4;
+	    int array_size = 0;
 //	    if (iter->symbol.result == NULL)
 //	    	break;
 	    if(iter->symbol.result.type->kind == TYPE_BASIC)
@@ -1648,7 +1658,7 @@ int ir_set_symbol_table_offsets(struct symbol_table *table, int overhead){
 	    {
 	    	if (iter->symbol.result.type->data.array.len > 1)
 	    	{
-	    		int array_size = 4;
+	    		array_size = 4;
 
 	    		if(iter->symbol.result.type->data.array.type->kind == TYPE_BASIC)
 	    		{
@@ -1662,6 +1672,7 @@ int ir_set_symbol_table_offsets(struct symbol_table *table, int overhead){
 	    }
 	    else if (iter->symbol.result.type->kind == TYPE_POINTER)
 	    {
+	    	// Here be arrays
 	    	if (iter->symbol.result.type->data.pointer.size > 1)
 	    	{
 	    		int array_size = 4;
@@ -1673,7 +1684,8 @@ int ir_set_symbol_table_offsets(struct symbol_table *table, int overhead){
 	    			else if(iter->symbol.result.type->data.pointer.type->data.basic.width == TYPE_WIDTH_SHORT)
 	    				array_size = 2;
 	    		}
-	    		size = iter->symbol.result.type->data.pointer.size * array_size;
+	    		// pointer -> overhead;
+	    		array_size = iter->symbol.result.type->data.pointer.size * array_size;
 	    	}
 	    }
 
@@ -1702,6 +1714,9 @@ int ir_set_symbol_table_offsets(struct symbol_table *table, int overhead){
 	    {
 		    iter->symbol.result.offset->data.offset = iter->symbol.result.type->param_num * 4;
 	    }
+
+	    // If there's an array, it will sit just below the pointer to it.
+	    overhead += array_size;
 
 	  }
 
@@ -1802,22 +1817,36 @@ void ir_generate_for_function_definition(struct node *statement) {
 	proc_begin->operands[2].data.number = type->data.func.num_params;
 	statement->ir = ir_section(proc_begin, proc_begin);
 
-	// Parameter's will need to get the values of the appropriate "a" register
-//	int param_count = 0;
-//	struct symbol_list *iter;
-//	for (iter = table->variables; NULL != iter; iter = iter->next)
-//	{
-//		if(iter->symbol.result.type->is_param == 1)
-//		{
-//			struct ir_instruction *load_param = ir_instruction(IR_LOAD_PARAM);
-//			load_param->operands[0].kind = OPERAND_NUMBER;
-//			load_param->operands[0].data.number = param_count;
-//			// Copy the value of the symbol's offset
-//			ir_operand_copy(load_param, 1, iter->symbol.result.offset);
-//			statement->ir = ir_append(statement->ir, load_param);
-//			param_count++;
-//		}
-//	}
+	// walk symbol table
+	// find "arrays"
+	// ir_instruction(IR_STORE_WORD) -> (store word wants two temporary operands)
+	// opernad[1] = ir_generate_for_identifier("array")
+	// operand[0] = 4 bytes after "array" offset
+	struct symbol_list *iter;
+	for (iter = table->variables; NULL != iter; iter = iter->next)
+	{
+		if(iter->symbol.result.type->kind == TYPE_POINTER &&
+				iter->symbol.result.type->data.pointer.size > 1)
+		{
+			struct ir_instruction *load = ir_instruction(IR_ADDRESS_OF);
+			ir_operand_temporary(load, 0);
+			ir_operand_copy(load, 1, iter->symbol.result.offset);
+			statement->ir = ir_append(statement->ir, load);
+
+			struct ir_instruction *add = ir_instruction(IR_ADDI);
+			ir_operand_temporary(add, 0);
+			ir_operand_copy(add, 1, &load->operands[0]);
+			add->operands[2].kind = OPERAND_NUMBER;
+			add->operands[2].data.number = 4;
+			statement->ir = ir_append(statement->ir, add);
+
+			struct ir_instruction *store = ir_instruction(IR_STORE_WORD);
+			ir_operand_copy(store, 0, &add->operands[0]);
+			ir_operand_copy(store, 1, iter->symbol.result.offset);
+			statement->ir = ir_append(statement->ir, store);
+		}
+
+	}
 
 	ir_generate_for_statement(statement->data.function_definition.compound, function_name, NULL, NULL);
 	statement->ir = ir_concatenate(statement->ir, statement->data.function_definition.compound->ir);
@@ -1973,6 +2002,8 @@ static void ir_print_opcode(FILE *output, int kind) {
 	"SH",
 	"SW",
 	"SEQ_PT",
+	"PRT_S",
+	"ADDI",
     NULL
   };
 
@@ -2024,6 +2055,7 @@ void ir_print_instruction(FILE *output, struct ir_instruction *instruction) {
     case IR_SUBU:
     case IR_MULU:
     case IR_DIVU:
+    case IR_ADDI:
       ir_print_operand(output, &instruction->operands[0]);
       fprintf(output, ", ");
       ir_print_operand(output, &instruction->operands[1]);
@@ -2070,6 +2102,8 @@ void ir_print_instruction(FILE *output, struct ir_instruction *instruction) {
     case IR_SEQUENCE_PT:
       ir_print_operand(output, &instruction->operands[0]);
       break;
+
+    case IR_PRINT_STRING:
     case IR_NO_OPERATION:
     case IR_RETURN_VOID:
       break;

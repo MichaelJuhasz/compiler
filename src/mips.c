@@ -80,27 +80,57 @@ char *mips_kind_to_opcode(int kind) {
 		"lhu",
 		"sb",
 		"sh",
-		"sw"
+		"sw",
+		NULL, // SEQ
+		NULL, // PRINT S
+		"addi"
+
 	};
 	return opcodes[kind];
 }
 
+/* mips_sequence_point - sets the register offset to the sequence point's operand
+ *   so that the following instruction's operands can be "zeroed"
+ *
+ * Parameters:
+ * 		operand - ir_operand - the sequence point's one and only operand
+ */
 void mips_sequence_point(struct ir_operand *operand) {
 	register_offset = operand->data.temporary + 1;
 }
 
+/* mips_print_temporary_operand - "zeros" the temporary operand value and prints its
+ *   formatted string mips representation
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		operand - ir_operand - a temporary operand
+ */
 void mips_print_temporary_operand(FILE *output, struct ir_operand *operand) {
   assert(OPERAND_TEMPORARY == operand->kind);
 
   fprintf(output, "%8s%02d", "$", operand->data.temporary + FIRST_USABLE_REGISTER - register_offset);
 }
 
+/* mips_print_number_operand - prints a formatted string representing a number (to be used
+ *   in an immediate command)
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		operand - ir_operand - a number operand
+ */
 void mips_print_number_operand(FILE *output, struct ir_operand *operand) {
   assert(OPERAND_NUMBER == operand->kind);
 
   fprintf(output, "%10lu", operand->data.number);
 }
 
+/* mips_print_hi_lo - prints a multiply or divide mips command, and a mfhi or mflo
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the op code and operands
+ */
 void mips_print_hi_lo(FILE *output, struct ir_instruction *instruction) {
 	int kind = instruction->kind;
 	if(kind == IR_MOD)
@@ -131,17 +161,32 @@ void mips_print_hi_lo(FILE *output, struct ir_instruction *instruction) {
 	fputs("\n", output);
 }
 
-void mips_print_arithmetic(FILE *output, struct ir_instruction *instruction) {
+/* mips_print_arithmetic - prints a formatted string representing an arithmetic mips command
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the op code and operands
+ */
+void mips_print_arithmetic(FILE *output, struct ir_instruction *instruction, int i) {
 
   fprintf(output, "%10s ", mips_kind_to_opcode(instruction->kind));
   mips_print_temporary_operand(output, &instruction->operands[0]);
   fputs(", ", output);
   mips_print_temporary_operand(output, &instruction->operands[1]);
   fputs(", ", output);
-  mips_print_temporary_operand(output, &instruction->operands[2]);
+  if (i == 1)
+	  mips_print_number_operand(output, &instruction->operands[2]);
+  else
+	  mips_print_temporary_operand(output, &instruction->operands[2]);
   fputs("\n", output);
 }
 
+/* mips_print_unary - prints a formatted string representing bitwise not or negation
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the op code and operands
+ */
 void mips_print_two_operands(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s ", mips_kind_to_opcode(instruction->kind));
 	mips_print_temporary_operand(output, &instruction->operands[0]);
@@ -150,21 +195,55 @@ void mips_print_two_operands(FILE *output, struct ir_instruction *instruction) {
 	fputs("\n", output);
 }
 
+/* mips_print_load_store - prints a formatted string representing a load or store command
+ *   Operands can either be temporaries or offsets
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the op code and operands
+ */
 void mips_print_load_store(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s ", mips_kind_to_opcode(instruction->kind));
 	mips_print_temporary_operand(output, &instruction->operands[0]);
-	fputs(", (", output);
-	mips_print_temporary_operand(output, &instruction->operands[1]);
-	fputs(")\n", output);
+	struct ir_operand *op = &instruction->operands[1];
+	if(op->kind == OPERAND_TEMPORARY)
+	{
+		fputs(", (", output);
+		mips_print_temporary_operand(output, op);
+		fputs(")\n", output);
+	}
+	else if(op->kind == OPERAND_LVALUE)
+		fprintf(output, "%6d%s\n", op->data.offset, "($fp)");
+
 }
 
+/* mips_print_load_address - prints a formatted string representing a la command
+ *     either from an offset or a label
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the op code and operands
+ */
 void mips_print_load_address (FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s ", mips_kind_to_opcode(instruction->kind));
 	mips_print_temporary_operand(output, &instruction->operands[0]);
 	fputs(", ", output);
-	fprintf(output, "%6d%s\n", instruction->operands[1].data.offset, "($fp)");
+	if(instruction->operands[1].kind == OPERAND_LVALUE)
+	{
+		fprintf(output, "%6d%s\n", instruction->operands[1].data.offset, "($fp)");
+	}
+	else if(instruction->operands[1].kind == OPERAND_LABEL)
+	{
+		fprintf(output, "%10s\n", instruction->operands[1].data.label_name);
+	}
 }
 
+/* mips_print_copy - prints an or command to move a value from one register to another
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the operands
+ */
 void mips_print_copy(FILE *output, struct ir_instruction *instruction) {
   fprintf(output, "%10s ", "or");
   mips_print_temporary_operand(output, &instruction->operands[0]);
@@ -173,6 +252,12 @@ void mips_print_copy(FILE *output, struct ir_instruction *instruction) {
   fprintf(output, ", %10s\n", "$0");
 }
 
+/* mips_print_load_immediate - prints a li command
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the operands
+ */
 void mips_print_load_immediate(FILE *output, struct ir_instruction *instruction) {
   fprintf(output, "%10s ", "li");
   mips_print_temporary_operand(output, &instruction->operands[0]);
@@ -181,6 +266,13 @@ void mips_print_load_immediate(FILE *output, struct ir_instruction *instruction)
   fputs("\n", output);
 }
 
+/* mips_print_print_number - does not print a number, but prints instructions for a syscall
+ *   to print a number to the console
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the operand
+ */
 void mips_print_print_number(FILE *output, struct ir_instruction *instruction) {
   fprintf(output, "%10s %10s, %10s, %10d\n", "ori", "$v0", "$0", 1);
   fprintf(output, "%10s %10s, %10s, ", "or", "$a0", "$0");
@@ -188,16 +280,47 @@ void mips_print_print_number(FILE *output, struct ir_instruction *instruction) {
   fprintf(output, "\n%10s\n", "syscall");
 }
 
+/* mips_print_print_string - prints instructions for a syscall to print a string to console
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the operand
+ */
+void mips_print_print_string(FILE *output, struct ir_instruction *instruction) {
+  fprintf(output, "%10s %10s, %10s, %10d\n", "ori", "$v0", "$0", 4);
+  fprintf(output, "%10s %10s, %10s, ", "or", "$a0", "$0");
+  mips_print_temporary_operand(output, &instruction->operands[0]);
+  fprintf(output, "\n%10s\n", "syscall");
+}
+
+/* mips_print_label - prints an operand label
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the operand
+ */
 void mips_print_label(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "\n%10s:", instruction->operands[0].data.label_name);
 	fputs("\n", output);
 }
 
+/* mips_print_goto - prints an unconditional branch to the label
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the label name
+ */
 void mips_print_goto(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s %10s", "b", instruction->operands[0].data.label_name);
 	fputs("\n", output);
 }
 
+/* mips_print_goto_cond - prints a conditional branch to the label
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the label name and conditional operand
+ */
 void mips_print_goto_cond(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s ", mips_kind_to_opcode(instruction->kind));
 	mips_print_temporary_operand(output, &instruction->operands[0]);
@@ -206,6 +329,12 @@ void mips_print_goto_cond(FILE *output, struct ir_instruction *instruction) {
 	fputs("\n", output);
 }
 
+/* mips_print_parameter - prints instructions to move a value into specified a register
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the value and number of a register
+ */
 void mips_print_parameter(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s%10s%d", "or", "$a", (int)instruction->operands[0].data.number);
 	fputs(", ", output);
@@ -215,6 +344,12 @@ void mips_print_parameter(FILE *output, struct ir_instruction *instruction) {
 	fputs("\n", output);
 }
 
+/* mips_print_return - prints instructions to move a value into $v0
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the value
+ */
 void mips_print_return(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s %10s, ", "or", "$v0");
 	mips_print_temporary_operand(output, &instruction->operands[0]);
@@ -223,6 +358,12 @@ void mips_print_return(FILE *output, struct ir_instruction *instruction) {
 	fputs("\n", output);
 }
 
+/* mips_print_result - prints instructions to move a value out of $v0
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the destination
+ */
 void mips_print_result(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s ", "or");
 	mips_print_temporary_operand(output, &instruction->operands[0]);
@@ -230,10 +371,23 @@ void mips_print_result(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s, %10s\n", "$v0", "$0");
 }
 
+/* mips_print_function_call - prints a jal to label
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the label name
+ */
 void mips_print_function_call(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s %10s\n", "jal", instruction->operands[0].data.label_name);
 }
 
+/* mips_print_proc_end - loads values saved on the stack back into registers, sets the frame pointer
+ *   to the callee's value, increments stack pointer, returns to ra
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the stack size
+ */
 void mips_print_proc_end(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s %10s, %10s\n", "lw", "$s7", "44($fp)");
 	fprintf(output, "%10s %10s, %10s\n", "lw", "$s6", "40($fp)");
@@ -258,6 +412,12 @@ void mips_print_proc_end(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s %10s\n", "jr", "$ra");
 }
 
+/* mips_print_proc_begin - decrements stack pointer, sets a new fp, sets old ra, saves registers on stack,
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction containing the stack size
+ */
 void mips_print_proc_begin(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%s:\n", instruction->operands[0].data.label_name);
 	int size = instruction->operands[1].data.number;
@@ -297,6 +457,12 @@ void mips_print_proc_begin(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s %10s, %10s\n", "sw", "$t7", "76($fp)");
 }
 
+/* mips_print_instruction - multi-way branch, sends instructions to the correct print function
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		instruction - ir_instruction - the instruction to print
+ */
 void mips_print_instruction(FILE *output, struct ir_instruction *instruction) {
   switch (instruction->kind) {
     case IR_MULTIPLY:
@@ -322,12 +488,16 @@ void mips_print_instruction(FILE *output, struct ir_instruction *instruction) {
     case IR_BIT_OR:
     case IR_ADDU:
     case IR_SUBU:
-      mips_print_arithmetic(output, instruction);
+      mips_print_arithmetic(output, instruction, 0);
       break;
+
+    case IR_ADDI:
+        mips_print_arithmetic(output, instruction, 1);
+        break;
 
     case IR_BIT_NOT:
     case IR_MAKE_NEGATIVE:
-    	mips_print_two_operands(output, instruction);
+    	mips_print_unary(output, instruction);
     	break;
 
     case IR_LOAD_BYTE:
@@ -355,6 +525,10 @@ void mips_print_instruction(FILE *output, struct ir_instruction *instruction) {
 
     case IR_PRINT_NUMBER:
       mips_print_print_number(output, instruction);
+      break;
+
+    case IR_PRINT_STRING:
+      mips_print_print_string(output, instruction);
       break;
 
     case IR_LABEL:
@@ -408,6 +582,12 @@ void mips_print_instruction(FILE *output, struct ir_instruction *instruction) {
   }
 }
 
+/* mips_print_text_section - prints a couple of standard pieces of preamble, then the instructions, one by one
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		section - ir_section - all the instructions
+ */
 void mips_print_text_section(FILE *output, struct ir_section *section) {
   struct ir_instruction *instruction;
 
@@ -419,6 +599,11 @@ void mips_print_text_section(FILE *output, struct ir_section *section) {
   }
 }
 
+/* mips_print_date_section - prints string labels from the globally accessible (yes, I'm terrible) string_labels array
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ */
 void mips_print_data_section(FILE *output) {
 	fputs("\n.data\n", output);
 
@@ -430,6 +615,12 @@ void mips_print_data_section(FILE *output) {
 	}
 }
 
+/* mips_print_text_program - calls the preamble print methods and passes the ir section to be printed
+ *
+ * Parameters:
+ * 		output - FILE - file to print to
+ * 		section - ir_section - all the instructions
+ */
 void mips_print_program(FILE *output, struct ir_section *section) {
   mips_print_data_section(output);
   mips_print_text_section(output, section);
