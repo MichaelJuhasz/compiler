@@ -275,15 +275,31 @@ void symbol_add_from_pointer_declarator(struct symbol_table *table, struct node 
  *    Memory will be allocated on the heap.
  */
 void symbol_add_from_function_declarator(struct symbol_table *table, struct node *func, struct type *symbol_type) {
-  struct node *list_node = func->data.function_declarator.params;
 
   if (symbol_type->kind != TYPE_FUNCTION)
   {
+	  struct node *list_node = func->data.function_declarator.params;
 	  struct type *function_type = malloc(sizeof(struct type));
 	  function_type->kind = TYPE_FUNCTION;
 	  function_type->data.func.return_type = symbol_type;
 	  function_type->data.func.is_definition = 0;
       function_type->data.func.table = NULL;
+
+        while(list_node != NULL) {
+          list_node = list_node->data.comma_list.next;
+          function_type->data.func.num_params++;
+        }
+
+        function_type->data.func.params = malloc(sizeof(struct type) * function_type->data.func.num_params);
+
+        int i;
+        for(i = 0; i < function_type->data.func.num_params; i++)
+        {
+      	  list_node = func->data.function_declarator.params->data.comma_list.data;
+
+      	  function_type->data.func.params[i] = node_get_type(list_node);
+      	  list_node = func->data.function_declarator.params->data.comma_list.next;
+        }
 	  symbol_type = function_type;
   }
 
@@ -296,22 +312,7 @@ void symbol_add_from_function_declarator(struct symbol_table *table, struct node
 	  return;
   }
 
-  while(list_node != NULL) {
-    list_node = list_node->data.comma_list.next;
-    symbol_type->data.func.num_params++;
-  }
 
-  symbol_type->data.func.params = malloc(sizeof(struct type) * symbol_type->data.func.num_params);
-
-  int i;
-  for(i = 0; i < symbol_type->data.func.num_params; i++)
-  {
-	  list_node = func->data.function_declarator.params->data.comma_list.data;
-
-    /*TODO Store as pointer - after I fix array symbol generation*/
-	  symbol_type->data.func.params[i] = node_get_type(list_node);
-	  list_node = func->data.function_declarator.params->data.comma_list.next;
-  }
 
   symbol_add_from_expression(table, func->data.function_declarator.dir_dec, symbol_type);
 }
@@ -633,20 +634,33 @@ void symbol_add_from_function_definition(struct symbol_table *parent_table, stru
   function_type->data.func.is_definition = 1;
   function_type->data.func.table = child_table;
 
-  symbol_add_from_expression(parent_table, func->data.function_definition.declarator, function_type);
-
   struct node *list_node = func->data.function_definition.declarator->data.function_declarator.params;
   int param_count = 0;
+
+  // TODO - why not do it this way?
   while(list_node != NULL)
+  {
+    list_node = list_node->data.comma_list.next;
+    function_type->data.func.num_params++;
+  }
+
+  function_type->data.func.params = malloc(sizeof(struct type) * function_type->data.func.num_params);
+
+  list_node = func->data.function_definition.declarator->data.function_declarator.params;
+  int i;
+  for(i = function_type->data.func.num_params; i > 0; i--)
   {
 	struct type *param_type = get_symbol_type_from_type_node(list_node->data.comma_list.data->data.parameter_decl.type);
 	param_type->is_param = 1;
-	param_type->param_num = param_count++;
+	param_type->param_num = i - 1;
 
-    /*TODO Store arrays as pointers - after I fix array symbol generation */
     symbol_add_from_expression(child_table, list_node->data.comma_list.data->data.parameter_decl.declarator, param_type);
-	  list_node = list_node->data.comma_list.next;
+	function_type->data.func.params[i] = param_type;
+	list_node = list_node->data.comma_list.next;
+
   }
+
+  symbol_add_from_expression(parent_table, func->data.function_definition.declarator, function_type);
 
   symbol_add_from_statement(parent_table, child_table, func->data.function_definition.compound);
 }

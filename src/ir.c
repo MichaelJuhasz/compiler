@@ -691,9 +691,9 @@ void ir_generate_for_log_and_or(struct node *binary_operation, int is_or) {
 	// Set the GOTO kind, based on && or ||
 	int kind;
 	if (is_or)
-		kind = IR_GOTO_IF_FALSE;
-	else
 		kind = IR_GOTO_IF_TRUE;
+	else
+		kind = IR_GOTO_IF_FALSE;
 
 	// Branch instruction
 	struct ir_instruction *branch_instruction = ir_instruction(kind);
@@ -709,6 +709,9 @@ void ir_generate_for_log_and_or(struct node *binary_operation, int is_or) {
 
 	ir_operand_copy(result_instruction, 1, right_op);
 	binary_operation->ir = ir_append(binary_operation->ir, result_instruction);
+	struct ir_instruction *end_jump = ir_instruction(IR_GOTO);
+	ir_operand_label(end_jump, 0);
+	binary_operation->ir = ir_append(binary_operation->ir, end_jump);
 
 	// Jump label
 	struct ir_instruction *label = ir_instruction(IR_LABEL);
@@ -717,10 +720,21 @@ void ir_generate_for_log_and_or(struct node *binary_operation, int is_or) {
 	ir_operand_copy(other_result, 1, left_op);
 	binary_operation->ir = ir_append(binary_operation->ir, other_result);
 
-	// Result is either "true" or "false".  It needs to be 1 or 0
-	struct ir_operand *real_result = ir_convert_to_zero_one(&result_instruction->operands[0], binary_operation->ir, 0);
+	// End label
+	struct ir_instruction *end_label = ir_instruction(IR_LABEL);
+	ir_operand_copy(end_label, 0, &end_jump->operands[0]);
+	binary_operation->ir = ir_append(binary_operation->ir, end_label);
 
-	binary_operation->data.binary_operation.result.ir_operand = real_result;
+	//	Result is either "true" or "false".  It needs to be 1 or 0
+	struct ir_instruction *zero_or_one = ir_instruction(IR_NOT_EQUAL);
+	ir_operand_copy(zero_or_one, 1, &result_instruction->operands[0]);
+	ir_operand_temporary(zero_or_one, 0);
+	zero_or_one->operands[2].kind = OPERAND_NUMBER;
+	zero_or_one->operands[2].data.number = 0;
+	binary_operation->ir = ir_append(binary_operation->ir, zero_or_one);
+
+	binary_operation->data.binary_operation.result.ir_operand = &zero_or_one->operands[0];
+
 }
 
 /* ir_generate_for_binary_operation - just a multi-way branch based on operation type 

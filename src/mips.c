@@ -167,18 +167,27 @@ void mips_print_hi_lo(FILE *output, struct ir_instruction *instruction) {
  * 		output - FILE - file to print to
  * 		instruction - ir_instruction - the instruction containing the op code and operands
  */
-void mips_print_arithmetic(FILE *output, struct ir_instruction *instruction, int i) {
+void mips_print_arithmetic(FILE *output, struct ir_instruction *instruction) {
 
   fprintf(output, "%10s ", mips_kind_to_opcode(instruction->kind));
   mips_print_temporary_operand(output, &instruction->operands[0]);
   fputs(", ", output);
   mips_print_temporary_operand(output, &instruction->operands[1]);
   fputs(", ", output);
-  if (i == 1)
+  struct ir_operand *op = &instruction->operands[2];
+  if (op->kind == OPERAND_NUMBER)
 	  mips_print_number_operand(output, &instruction->operands[2]);
   else
 	  mips_print_temporary_operand(output, &instruction->operands[2]);
   fputs("\n", output);
+}
+
+void mips_print_log_not(FILE *output, struct ir_instruction *instruction) {
+	fprintf(output, "%10s ", "seq");
+	mips_print_temporary_operand(output, &instruction->operands[0]);
+	fputs(", ", output);
+	mips_print_temporary_operand(output, &instruction->operands[1]);
+	fprintf(output, ", %10s\n", "$0");
 }
 
 /* mips_print_unary - prints a formatted string representing bitwise not or negation
@@ -488,12 +497,17 @@ void mips_print_instruction(FILE *output, struct ir_instruction *instruction) {
     case IR_BIT_OR:
     case IR_ADDU:
     case IR_SUBU:
-      mips_print_arithmetic(output, instruction, 0);
-      break;
-
     case IR_ADDI:
-        mips_print_arithmetic(output, instruction, 1);
-        break;
+      mips_print_arithmetic(output, instruction);
+      break;
+//
+//    case IR_ADDI:
+//        mips_print_arithmetic(output, instruction, 1);
+//        break;
+
+    case IR_LOG_NOT:
+    	mips_print_log_not(output, instruction);
+    	break;
 
     case IR_BIT_NOT:
     case IR_MAKE_NEGATIVE:
