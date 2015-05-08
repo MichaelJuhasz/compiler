@@ -18,7 +18,7 @@ struct ir_operand {
   int kind;
 
   union {
-    unsigned long number;
+    long number;
     int temporary;
     int offset;
     char *label_name;

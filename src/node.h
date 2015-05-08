@@ -68,7 +68,7 @@ struct node {
   struct ir_section *ir;
   union {
     struct {
-      unsigned long value;
+      long value;
       bool overflow;
       struct result result;
       int type;

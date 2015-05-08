@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <string.h>
+#include <math.h>
 
 #include "node.h"
 #include "symbol.h"
@@ -382,6 +383,180 @@ void ir_generate_for_numeric_unary(int kind, struct node *unary_operation) {
 	  unary_operation->data.unary_operation.result.ir_operand = &instruction->operands[0];
 }
 
+void ir_constant_folding_bi(struct node *binary_operation, long left, long right) {
+	  long result;
+
+	  switch(binary_operation->data.binary_operation.operation)
+	  {
+	  case OP_ASTERISK:
+		  result = left * right;
+		  break;
+	  case OP_SLASH:
+		  result = left / right;
+		  break;
+	  case OP_PLUS:
+		  result = left + right;
+		  break;
+	  case OP_MINUS:
+		  result = left - right;
+		  break;
+	  case OP_AMPERSAND:
+		  result = left & right;
+		  break;
+	  case OP_PERCENT:
+		  result = left % right;
+		  break;
+	  case OP_LESS_LESS:
+		  result = left << right;
+		  break;
+	  case OP_GREATER_GREATER:
+		  result = left >> right;
+		  break;
+	  case OP_VBAR:
+		  result = left | right;
+		  break;
+	  case OP_CARET:
+		  result = left ^ right;
+		  break;
+	  default:
+		  assert(0);
+		  break;
+	  }
+
+	  struct ir_instruction *li = ir_instruction(IR_LOAD_IMMEDIATE);
+	  ir_operand_temporary(li, 0);
+	  li->operands[1].kind = OPERAND_NUMBER;
+	  li->operands[1].data.number = result;
+	  binary_operation->ir = ir_section(li, li);
+	  binary_operation->data.binary_operation.result.ir_operand = &li->operands[0];
+}
+
+int ir_constant_check(struct node *node) {
+	if(node->kind == NODE_NUMBER)
+	{
+		return 1;
+	}
+	else if(node->ir->last->kind == IR_LOAD_IMMEDIATE)
+	{
+		return 1;
+	}
+	return 0;
+}
+
+long ir_get_constant(struct node *node)
+{
+	if(node->kind == NODE_NUMBER)
+	{
+		return node->data.number.value;
+	}
+	else
+	{
+		return node->ir->last->operands[1].data.number;
+	}
+}
+
+void ir_return_zero(struct node *node)
+{
+	struct ir_instruction *li = ir_instruction(IR_LOAD_IMMEDIATE);
+	ir_operand_temporary(li, 0);
+	li->operands[1].kind = OPERAND_NUMBER;
+	li->operands[1].data.number = 0;
+	node->ir = ir_section(li, li);
+	node->data.binary_operation.result.ir_operand = &li->operands[0];
+}
+
+int ir_simplify_binary(struct node *binary_operation, struct ir_operand *op, int result, int left_side)
+{
+
+	struct node *node = binary_operation->data.binary_operation.left_operand;
+	if(left_side)
+	{
+		node = binary_operation->data.binary_operation.right_operand;
+	}
+	if(result == 0)
+	{
+		switch(binary_operation->data.binary_operation.operation)
+		{
+		case OP_GREATER_GREATER:
+		case OP_LESS_LESS:
+			if(left_side)
+			{
+				ir_return_zero(binary_operation);
+				return 1;
+			}
+		case OP_MINUS:
+			if(left_side)
+				break;
+		case OP_PLUS:
+		case OP_VBAR:
+	    	  binary_operation->ir = ir_copy(node->ir);
+	    	  op = ir_convert_l_to_r(op, binary_operation->ir, node);
+			  binary_operation->data.binary_operation.result.ir_operand = op;
+			  return 1;
+		case OP_CARET:
+			break;
+		default:
+			ir_return_zero(binary_operation);
+			return 1;
+		}
+	}
+	else if(result == 1)
+	{
+		switch(binary_operation->data.binary_operation.operation)
+		{
+		case OP_SLASH:
+			if(left_side)
+				break;
+		case OP_ASTERISK:
+	    	  binary_operation->ir = ir_copy(node->ir);
+	    	  op = ir_convert_l_to_r(op, binary_operation->ir, node);
+			  binary_operation->data.binary_operation.result.ir_operand = op;
+			  return 1;
+		case OP_PERCENT:
+			if(!left_side)
+			{
+				ir_return_zero(binary_operation);
+				return 1;
+			}
+			else break;
+		default:
+			break;
+		}
+	}
+	else if(result % 2 == 0)
+	{
+		if(!left_side)
+		{
+			if(binary_operation->data.binary_operation.operation == OP_ASTERISK ||
+				binary_operation->data.binary_operation.operation == OP_SLASH)
+			{
+
+		    	binary_operation->ir = ir_copy(node->ir);
+		    	op = ir_convert_l_to_r(op, binary_operation->ir, node);
+				int direction = IR_SHIFT_RIGHT;
+				if(binary_operation->data.binary_operation.operation == OP_ASTERISK)
+					direction = IR_SHIFT_LEFT;
+				result = log(result)/log(2);
+				struct ir_instruction *li = ir_instruction(IR_LOAD_IMMEDIATE);
+				ir_operand_temporary(li, 0);
+				li->operands[1].kind = OPERAND_NUMBER;
+				li->operands[1].data.number = result;
+
+				struct ir_instruction *shift = ir_instruction(direction);
+				ir_operand_temporary(shift, 0);
+				ir_operand_copy(shift, 1, op);
+				ir_operand_copy(shift, 2, &li->operands[0]);
+
+				binary_operation->ir = ir_append(binary_operation->ir, li);
+				binary_operation->ir = ir_append(binary_operation->ir, shift);
+				binary_operation->data.binary_operation.result.ir_operand = &shift->operands[0];
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
 /* ir_generate_for_arithmetic_binary_operation - adds a binary operation instructions 
  *  Calls convert_l_to_r in case of lvalue operands and pointer_arithmetic in case of pointers
  *
@@ -398,15 +573,64 @@ void ir_generate_for_arithmetic_binary_operation(int kind, struct node *binary_o
   struct ir_instruction *pointer_inst;
   struct ir_instruction *factor_inst;
   assert(NODE_BINARY_OPERATION == binary_operation->kind);
+//
+//  if(binary_operation->data.binary_operation.left_operand->kind == NODE_NUMBER ||
+//		  binary_operation->data.binary_operation.right_operand->kind == NODE_NUMBER)
+//  {
+//	  if(ir_constant_folding_bi(binary_operation))
+//		  return;
+//  }
+    int flag = 0;
+  	long left_result;
+  	long right_result;
 
-  ir_generate_for_expression(binary_operation->data.binary_operation.left_operand);
-  struct ir_operand *left_op = node_get_result(binary_operation->data.binary_operation.left_operand)->ir_operand;
+  	// Generate ir for both expressions
+    ir_generate_for_expression(binary_operation->data.binary_operation.left_operand);
+    struct ir_operand *left_op = node_get_result(binary_operation->data.binary_operation.left_operand)->ir_operand;
+    ir_generate_for_expression(binary_operation->data.binary_operation.right_operand);
+    struct ir_operand *right_op = node_get_result(binary_operation->data.binary_operation.right_operand)->ir_operand;
 
-  ir_generate_for_expression(binary_operation->data.binary_operation.right_operand);
-  struct ir_operand *right_op = node_get_result(binary_operation->data.binary_operation.right_operand)->ir_operand;
+    // Check to see if left side is constant
+    ir_constant_check(binary_operation->data.binary_operation.left_operand);
+    if(ir_constant_check(binary_operation->data.binary_operation.left_operand))
+    {
+    	flag = 1;
+    	left_result = ir_get_constant(binary_operation->data.binary_operation.left_operand);
+    }
 
-  binary_operation->ir = ir_concatenate(binary_operation->data.binary_operation.left_operand->ir,
-                                        binary_operation->data.binary_operation.right_operand->ir);
+    // Check to see if right side is constant
+    ir_constant_check(binary_operation->data.binary_operation.right_operand);
+    if(ir_constant_check(binary_operation->data.binary_operation.right_operand))
+    {
+    	if (flag == 1)
+    		flag = 3;
+    	else
+    		flag = 2;
+    	right_result = ir_get_constant(binary_operation->data.binary_operation.right_operand);
+    }
+
+    // In this case, both sides are constants
+    if(flag == 3)
+    {
+    	ir_constant_folding_bi(binary_operation, left_result, right_result);
+    	return;
+    }
+
+    // Left side is constant, right is not
+    if(flag == 1)
+    {
+    	if(ir_simplify_binary(binary_operation, right_op, left_result, 1))
+    		return;
+    }
+
+    if(flag == 2)
+    {
+    	if(ir_simplify_binary(binary_operation, left_op, right_result, 0))
+    		return;
+    }
+
+  binary_operation->ir = ir_copy(binary_operation->data.binary_operation.left_operand->ir);
+  binary_operation->ir = ir_concatenate(binary_operation->ir, binary_operation->data.binary_operation.right_operand->ir);
 
   left_op = ir_convert_l_to_r(left_op, binary_operation->ir, binary_operation->data.binary_operation.left_operand);
   right_op = ir_convert_l_to_r(right_op, binary_operation->ir, binary_operation->data.binary_operation.right_operand);
@@ -418,7 +642,6 @@ void ir_generate_for_arithmetic_binary_operation(int kind, struct node *binary_o
 
   if(binary_operation->data.binary_operation.left_operand->kind == NODE_IDENTIFIER)
   {
-	int width;
     left_kind = left_type->kind;
   }
   if(binary_operation->data.binary_operation.right_operand->kind == NODE_IDENTIFIER)
@@ -458,6 +681,7 @@ void ir_generate_for_arithmetic_binary_operation(int kind, struct node *binary_o
 		  break;
 	  }
   }
+
   instruction = ir_instruction(kind);
   ir_operand_temporary(instruction, 0);
   ir_operand_copy(instruction, 1, left_op);
@@ -551,14 +775,6 @@ void ir_generate_for_compound_assignment(int kind, struct node *binary_operation
 	binary_operation->data.binary_operation.result.ir_operand = &instruction->operands[0];
 }
 
-void ir_generate_for_logical_not(struct node *unary_operation) {
-	struct ir_operand *result = node_get_result(unary_operation->data.unary_operation.operand)->ir_operand;
-	result = ir_convert_l_to_r(result, unary_operation->ir, unary_operation->data.unary_operation.operand);
-	result = ir_convert_to_zero_one(result, unary_operation->ir, 1);
-
-	unary_operation->data.unary_operation.result.ir_operand = result;
-}
-
 /* ir_generate_for_unary_operation - part multi-way branch, but also directly 
  *  handles & and *
  *
@@ -571,13 +787,39 @@ void ir_generate_for_logical_not(struct node *unary_operation) {
  */
 void ir_generate_for_unary_operation(struct node *unary_operation) {
 	  assert(NODE_UNARY_OPERATION == unary_operation->kind);
+	  if(unary_operation->data.unary_operation.operand->kind == NODE_NUMBER)
+	  {
+		  long result = unary_operation->data.unary_operation.operand->data.number.value;
+		  switch(unary_operation->data.unary_operation.operation)
+		  {
+		  case OP_EXCLAMATION:
+			  result = !result;
+			  break;
+		  case OP_MINUS:
+			  result = -result;
+			  break;
+		  case OP_TILDE:
+			  result = ~result;
+			  break;
+		  default:
+			  break;
+		  }
+		  struct ir_instruction *li = ir_instruction(IR_LOAD_IMMEDIATE);
+		  ir_operand_temporary(li, 0);
+		  li->operands[1].kind = OPERAND_NUMBER;
+		  li->operands[1].data.number = result;
+		  unary_operation->ir = ir_section(li, li);
+		  unary_operation->data.unary_operation.result.ir_operand = &li->operands[0];
+		  return;
+	  }
+
 	  ir_generate_for_expression(unary_operation->data.unary_operation.operand);
 	  unary_operation->ir = ir_copy(unary_operation->data.unary_operation.operand->ir);
 	  struct ir_instruction *instruction;
 
 	  switch (unary_operation->data.unary_operation.operation) {
 	    case OP_EXCLAMATION:
-	    	ir_generate_for_logical_not(unary_operation);
+	    	ir_generate_for_numeric_unary(IR_LOG_NOT, unary_operation);
 	    	break;
 	    case OP_PLUS:
 	    	ir_generate_for_numeric_unary(IR_MAKE_POSITIVE, unary_operation);
@@ -589,10 +831,9 @@ void ir_generate_for_unary_operation(struct node *unary_operation) {
 	    	ir_generate_for_numeric_unary(IR_BIT_NOT, unary_operation);
 	    	break;
 
+	    // TODO Yeah...
 	    case OP_ASTERISK:;
-	    	struct node *id_node = unary_operation->data.unary_operation.operand;
-
-	    	struct ir_operand *op = node_get_result(id_node)->ir_operand;
+	  	  struct ir_operand *op = node_get_result(unary_operation->data.unary_operation.operand)->ir_operand;
 //	    	op = ir_convert_l_to_r(op, unary_operation->ir, unary_operation->data.unary_operation.operand);
 
 	    	/* This should actually return an lvalue.  The second load word would be accomplished by
@@ -2027,7 +2268,7 @@ static void ir_print_opcode(FILE *output, int kind) {
 static void ir_print_operand(FILE *output, struct ir_operand *operand) {
   switch (operand->kind) {
     case OPERAND_NUMBER:
-      fprintf(output, "%10hu", (unsigned short)operand->data.number);
+      fprintf(output, "%10hd", (short)operand->data.number);
       break;
 
     case OPERAND_TEMPORARY:

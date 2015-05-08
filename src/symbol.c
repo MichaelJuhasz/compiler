@@ -77,6 +77,15 @@ struct symbol *symbol_put(struct symbol_table *table, char name[]) {
  * 		identifier - node - the node containing the identifier
  * 		symbol_type - type_node - type tree for symbol
  */
+/* The following eight methods don't do much aside from pass node contents back to symbol_add_from_expression.
+ * They are used to sift through non-declarations to find identifiers.  Since they should only ever handle
+ * non-declarations, they don't need to preserve symbol_type.
+ *
+ * Parameters:
+ * 		table - symbol_table - the table to add to
+ * 		* - node - some type of node whose contents are other nodes, potentially containing identifiers
+ */
+
 void symbol_add_from_identifier(struct symbol_table *table, struct node *identifier, struct type *symbol_type) {
   struct symbol *symbol;
   assert(NODE_IDENTIFIER == identifier->kind);
@@ -135,14 +144,6 @@ void symbol_add_from_identifier(struct symbol_table *table, struct node *identif
   else identifier->data.identifier.symbol = symbol;
 }
 
-/* The following eight methods don't do much aside from pass node contents back to symbol_add_from_expression.
- * They are used to sift through non-declarations to find identifiers.  Since they should only ever handle
- * non-declarations, they don't need to preserve symbol_type.
- *
- * Parameters:
- * 		table - symbol_table - the table to add to
- * 		* - node - some type of node whose contents are other nodes, potentially containing identifiers
- */
 
 void symbol_add_from_unary_operation(struct symbol_table *table, struct node *unary_operation) {
   assert(NODE_UNARY_OPERATION == unary_operation->kind);
@@ -311,8 +312,6 @@ void symbol_add_from_function_declarator(struct symbol_table *table, struct node
 	  printf("ERROR - line %d: Cannot create symbol; illegal function return type.\n", func->line_number);
 	  return;
   }
-
-
 
   symbol_add_from_expression(table, func->data.function_declarator.dir_dec, symbol_type);
 }
@@ -648,14 +647,22 @@ void symbol_add_from_function_definition(struct symbol_table *parent_table, stru
 
   list_node = func->data.function_definition.declarator->data.function_declarator.params;
   int i;
+//
+//  list_node = func->data.function_declarator.params->data.comma_list.data;
+//
+//  function_type->data.func.params[i] = node_get_type(list_node);
+//  list_node = func->data.function_declarator.params->data.comma_list.next;
+
   for(i = function_type->data.func.num_params; i > 0; i--)
   {
-	struct type *param_type = get_symbol_type_from_type_node(list_node->data.comma_list.data->data.parameter_decl.type);
+//	struct type *param_type = get_symbol_type_from_type_node(list_node->data.comma_list.data->data.parameter_decl.type);
+	struct type *param_type = node_get_type(list_node->data.comma_list.data);
+
 	param_type->is_param = 1;
 	param_type->param_num = i - 1;
 
-    symbol_add_from_expression(child_table, list_node->data.comma_list.data->data.parameter_decl.declarator, param_type);
-	function_type->data.func.params[i] = param_type;
+	symbol_add_from_expression(child_table, list_node->data.comma_list.data->data.parameter_decl.declarator, param_type);
+	function_type->data.func.params[i - 1] = param_type;
 	list_node = list_node->data.comma_list.next;
 
   }

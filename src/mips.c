@@ -122,7 +122,7 @@ void mips_print_temporary_operand(FILE *output, struct ir_operand *operand) {
 void mips_print_number_operand(FILE *output, struct ir_operand *operand) {
   assert(OPERAND_NUMBER == operand->kind);
 
-  fprintf(output, "%10lu", operand->data.number);
+  fprintf(output, "%10ld", operand->data.number);
 }
 
 /* mips_print_hi_lo - prints a multiply or divide mips command, and a mfhi or mflo
