@@ -214,10 +214,11 @@ void mips_print_unary(FILE *output, struct ir_instruction *instruction) {
 void mips_print_load_store(FILE *output, struct ir_instruction *instruction) {
 	fprintf(output, "%10s ", mips_kind_to_opcode(instruction->kind));
 	mips_print_temporary_operand(output, &instruction->operands[0]);
+	fputs(", ", output);
 	struct ir_operand *op = &instruction->operands[1];
 	if(op->kind == OPERAND_TEMPORARY)
 	{
-		fputs(", (", output);
+		fputs("(", output);
 		mips_print_temporary_operand(output, op);
 		fputs(")\n", output);
 	}
@@ -636,6 +637,7 @@ void mips_print_data_section(FILE *output) {
  * 		section - ir_section - all the instructions
  */
 void mips_print_program(FILE *output, struct ir_section *section) {
+  register_offset = 0;
   mips_print_data_section(output);
   mips_print_text_section(output, section);
 }

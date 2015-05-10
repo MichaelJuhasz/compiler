@@ -101,7 +101,7 @@ struct ir_section {
 };
 
 void ir_print_section(FILE *output, struct ir_section *section);
-void ir_generate_for_translation_unit(struct node *node);
+void ir_generate_for_program(struct node *node);
 struct ir_operand *ir_convert_to_zero_one(struct ir_operand *result, struct ir_section *ir, int is_log_not);
 
 

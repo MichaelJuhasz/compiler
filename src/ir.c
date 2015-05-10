@@ -489,15 +489,21 @@ int ir_simplify_binary(struct node *binary_operation, struct ir_operand *op, int
 				break;
 		case OP_PLUS:
 		case OP_VBAR:
+		case OP_AMPERSAND:
 	    	  binary_operation->ir = ir_copy(node->ir);
 	    	  op = ir_convert_l_to_r(op, binary_operation->ir, node);
 			  binary_operation->data.binary_operation.result.ir_operand = op;
 			  return 1;
 		case OP_CARET:
+		case OP_ASTERISK:
+		case OP_SLASH:
+		case OP_PERCENT:
 			break;
-		default:
 			ir_return_zero(binary_operation);
 			return 1;
+
+		default:
+			return 0;
 		}
 	}
 	else if(result == 1)
@@ -1328,11 +1334,48 @@ void ir_generate_for_cast(struct node *cast) {
 		expression->data.prefix.result.ir_operand = &oper_instruction->operands[0];
 }
 
-/* ir_generate_for_function_call - generates up to four IR_PARAMETER instructions 
- *  one IR_FUNCTION_CALL and up to one IR_RESULT_WORD/BYTE 
+int ir_generate_for_parameter_list(struct node *call, struct node *list_node, char *function_name) {
+	struct ir_instruction *pass_arg;
+	int arg_num = 0;
+	if (list_node->data.comma_list.next != NULL)
+	{
+		arg_num = ir_generate_for_parameter_list(call, list_node->data.comma_list.next, function_name);
+	}
+	ir_generate_for_expression(list_node->data.comma_list.data);
+	call->ir = ir_concatenate(call->ir, list_node->data.comma_list.data->ir);
+	struct ir_operand *arg_op = node_get_result(list_node->data.comma_list.data)->ir_operand;
+	arg_op = ir_convert_l_to_r(arg_op, call->ir, list_node->data.comma_list.data);
+
+	if(strcmp(function_name, "print_number") == 0)
+	{
+		pass_arg = ir_instruction(IR_PRINT_NUMBER);
+		ir_operand_copy(pass_arg, 0, arg_op);
+		call->ir = ir_append(call->ir, pass_arg);
+		return -1;
+	}
+
+	if(strcmp(function_name, "print_string") == 0)
+	{
+		pass_arg = ir_instruction(IR_PRINT_STRING);
+		ir_operand_copy(pass_arg, 0, arg_op);
+		call->ir = ir_append(call->ir, pass_arg);
+		return -1;
+	}
+
+	pass_arg = ir_instruction(IR_PARAMETER);
+	pass_arg->operands[0].kind = OPERAND_NUMBER;
+	pass_arg->operands[0].data.number = arg_num;
+	ir_operand_copy(pass_arg, 1, arg_op);
+	list_node = list_node->data.comma_list.next;
+	call->ir = ir_append(call->ir, pass_arg);
+	return ++arg_num;
+}
+
+/* ir_generate_for_function_call - generates up to four IR_PARAMETER instructions
+ *  one IR_FUNCTION_CALL and up to one IR_RESULT_WORD/BYTE
  *
- * Parameters: 
- *   call - node - contains the function call expression 
+ * Parameters:
+ *   call - node - contains the function call expression
  *
  * Side-effects:
  *   Memory may be allocated on the heap.
@@ -1340,45 +1383,15 @@ void ir_generate_for_cast(struct node *cast) {
  */
 void ir_generate_for_function_call(struct node *call) {
 	struct node *list_node = call->data.function_call.args;
-	struct ir_instruction *pass_arg;
 	int arg_num = 0;
-	struct ir_section *ir;
 	char *function_name = call->data.function_call.expression->data.identifier.name;
+	struct ir_instruction *dummy = ir_instruction(IR_NO_OPERATION);
+	call->ir = ir_section(dummy, dummy);
 
-	while(list_node != NULL)
-	{
-		ir_generate_for_expression(list_node->data.comma_list.data);
-		ir = ir_copy(list_node->data.comma_list.data->ir);
-		struct ir_operand *arg_op = node_get_result(call->data.function_call.args->data.comma_list.data)->ir_operand;
-		arg_op = ir_convert_l_to_r(arg_op, ir, list_node->data.comma_list.data);
-
-		if(strcmp(function_name, "print_number") == 0)
-		{
-			pass_arg = ir_instruction(IR_PRINT_NUMBER);
-			ir_operand_copy(pass_arg, 0, arg_op);
-			ir = ir_append(ir, pass_arg);
-			call->ir = ir;
-			return;
-		}
-
-		if(strcmp(function_name, "print_string") == 0)
-		{
-			pass_arg = ir_instruction(IR_PRINT_STRING);
-			ir_operand_copy(pass_arg, 0, arg_op);
-			ir = ir_append(ir, pass_arg);
-			call->ir = ir;
-			return;
-		}
-
-		pass_arg = ir_instruction(IR_PARAMETER);
-		pass_arg->operands[0].kind = OPERAND_NUMBER;
-		pass_arg->operands[0].data.number = arg_num++;
-		ir_operand_copy(pass_arg, 1, arg_op);
-		list_node = list_node->data.comma_list.next;
-		ir = ir_append(ir, pass_arg);
-	}
-
-	if(arg_num > 3)
+	arg_num = ir_generate_for_parameter_list(call, list_node, function_name);
+	if(arg_num == -1)
+		return;
+	if(arg_num > 4)
 	{
 		ir_generation_num_errors++;
 		printf("ERROR - Functions can't take more than four arguments.\n");
@@ -1387,7 +1400,7 @@ void ir_generate_for_function_call(struct node *call) {
 	struct ir_instruction *function_instruction = ir_instruction(IR_FUNCTION_CALL);
 	function_instruction->operands[0].kind = OPERAND_LABEL;
 	function_instruction->operands[0].data.label_name = function_name;
-	ir_append(ir, function_instruction);
+	call->ir = ir_append(call->ir, function_instruction);
 
 	struct type *return_type = type_get_from_node(call->data.function_call.expression)->data.func.return_type;
 	if(return_type->kind != TYPE_VOID)
@@ -1399,7 +1412,7 @@ void ir_generate_for_function_call(struct node *call) {
 			kind = IR_RESULT_WORD;
 		struct ir_instruction *return_instruction = ir_instruction(kind);
 		ir_operand_temporary(return_instruction, 0);
-		ir_append(ir, return_instruction);
+		call->ir = ir_append(call->ir, return_instruction);
 
 		call->data.function_call.result.ir_operand = &return_instruction->operands[0];
 	}
@@ -1407,8 +1420,6 @@ void ir_generate_for_function_call(struct node *call) {
 	// This shouldn't be necessary, but we might want to set something, just to be safe.
 	else
 		call->data.function_call.result.ir_operand = &function_instruction->operands[0];
-
-	call->ir = ir;
 }
 
 /* ir_generate_for_comma_list - calls generate_for_expression for each item in list
@@ -1494,6 +1505,8 @@ void ir_generate_for_expression(struct node *expression) {
   }
 }
 
+void ir_generate_for_statement(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk, int frame_size);
+
 /* ir_generate_for_expression_statement - passes contents to generate_for_expression
  *
  * Parameters: 
@@ -1521,22 +1534,22 @@ void ir_generate_for_expression_statement(struct node *expression_statement) {
  *   brk - ir_instruction - instruction with label for break statements
  *
  */
-void ir_generate_for_statement_list(struct node *statement_list, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk) {
+void ir_generate_for_statement_list(struct node *statement_list, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk, int frame_size) {
   struct node *init = statement_list->data.statement_list.init;
   struct node *statement = statement_list->data.statement_list.statement;
 
   assert(NODE_STATEMENT_LIST == statement_list->kind);
 
   if (NULL != init) {
-    ir_generate_for_statement_list(init, function_name, cont, brk);
+    ir_generate_for_statement_list(init, function_name, cont, brk, frame_size);
     statement_list->ir = init->ir;
-    ir_generate_for_statement(statement, function_name, cont, brk);
+    ir_generate_for_statement(statement, function_name, cont, brk, frame_size);
     if(init->ir == NULL)
     	statement_list->ir = statement->ir;
     else
     	statement_list->ir = ir_concatenate(init->ir, statement->ir);
   } else {
-    ir_generate_for_statement(statement, function_name, cont, brk);
+    ir_generate_for_statement(statement, function_name, cont, brk, frame_size);
     statement_list->ir = statement->ir;
   }
 }
@@ -1552,7 +1565,7 @@ void ir_generate_for_statement_list(struct node *statement_list, char function_n
  * Side-effects:
  *   Memory may be allocated on the heap.
  */
-void ir_generate_for_labeled_statement(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk) {
+void ir_generate_for_labeled_statement(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk, int frame_size) {
 	char *label_name = statement->data.labeled_statement.id->data.identifier.name;
 	char *str_buf = malloc(256);
 	sprintf(str_buf,"_UserLabel_%s_%s", function_name, label_name);
@@ -1561,7 +1574,7 @@ void ir_generate_for_labeled_statement(struct node *statement, char function_nam
 	label_instruction->operands[0].data.label_name = str_buf;
 	struct ir_section *ir = ir_section(label_instruction, label_instruction);
 
-	ir_generate_for_statement(statement->data.labeled_statement.statement, function_name, cont, brk);
+	ir_generate_for_statement(statement->data.labeled_statement.statement, function_name, cont, brk, frame_size);
 	ir = ir_concatenate(ir, statement->data.labeled_statement.statement->ir);
 	statement->ir = ir;
 }
@@ -1577,11 +1590,11 @@ void ir_generate_for_labeled_statement(struct node *statement, char function_nam
  * Side-effects:
  *   Memory may be allocated on the heap.
  */
-void ir_generate_for_compound(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk) {
+void ir_generate_for_compound(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk, int frame_size) {
   assert(NODE_COMPOUND == statement->kind);
   if(statement->data.compound.statement_list != NULL)
   {
-    ir_generate_for_statement_list(statement->data.compound.statement_list, function_name, cont, brk);
+    ir_generate_for_statement_list(statement->data.compound.statement_list, function_name, cont, brk, frame_size);
     statement->ir = ir_copy(statement->data.compound.statement_list->ir);
   }
   else
@@ -1599,7 +1612,7 @@ void ir_generate_for_compound(struct node *statement, char function_name[], stru
  * Side-effects:
  *   Memory may be allocated on the heap.
  */
-void ir_generate_for_conditional(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk) {
+void ir_generate_for_conditional(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk, int frame_size) {
 	ir_generate_for_expression(statement->data.conditional.expr);
 	struct ir_section *ir = ir_copy(statement->data.conditional.expr->ir);
 	struct ir_operand *expr_op = node_get_result(statement->data.conditional.expr)->ir_operand;
@@ -1613,7 +1626,7 @@ void ir_generate_for_conditional(struct node *statement, char function_name[], s
 	printf("%s\n",branch_instruction->operands[1].data.label_name);
 
 	// Then instructions
-	ir_generate_for_statement(statement->data.conditional.then_statement, function_name, cont, brk);
+	ir_generate_for_statement(statement->data.conditional.then_statement, function_name, cont, brk, frame_size);
 	ir = ir_concatenate(ir, statement->data.conditional.then_statement->ir);
 
 	struct ir_instruction *goto_instruction;
@@ -1633,7 +1646,7 @@ void ir_generate_for_conditional(struct node *statement, char function_name[], s
 	// False branch
 	if(statement->data.conditional.else_statement != NULL)
 	{
-		ir_generate_for_statement(statement->data.conditional.else_statement, function_name, cont, brk);
+		ir_generate_for_statement(statement->data.conditional.else_statement, function_name, cont, brk, frame_size);
 		ir = ir_concatenate(ir, statement->data.conditional.else_statement->ir);
 
 		struct ir_instruction *second_label = ir_instruction(IR_LABEL);
@@ -1654,7 +1667,7 @@ void ir_generate_for_conditional(struct node *statement, char function_name[], s
  * Side-effects:
  *   Memory may be allocated on the heap.
  */
-void ir_generate_for_for(struct node *statement, char function_name[]) {
+void ir_generate_for_for(struct node *statement, char function_name[], int frame_size) {
 	assert(statement->kind == NODE_WHILE);
 	assert(statement->data.while_loop.expr->kind == NODE_FOR);
 	struct node *for_expr = statement->data.while_loop.expr;
@@ -1690,7 +1703,7 @@ void ir_generate_for_for(struct node *statement, char function_name[]) {
 	}
 
 	// Now the body
-	ir_generate_for_statement(statement->data.while_loop.statement, function_name, continue_label, break_label);
+	ir_generate_for_statement(statement->data.while_loop.statement, function_name, continue_label, break_label, frame_size);
 	statement->ir = ir_concatenate(statement->ir, statement->data.while_loop.statement->ir);
 
 	// If expr3 is included, evaluate it
@@ -1720,7 +1733,7 @@ void ir_generate_for_for(struct node *statement, char function_name[]) {
  * Side-effects:
  *   Memory may be allocated on the heap.
  */
-void ir_generate_for_while(struct node *statement, char function_name[]) {
+void ir_generate_for_while(struct node *statement, char function_name[], int frame_size) {
 	struct ir_instruction *continue_label = ir_instruction(IR_LABEL);
 	struct ir_instruction *break_label = ir_instruction(IR_LABEL);
 	struct ir_instruction *branch_instruction;
@@ -1750,7 +1763,7 @@ void ir_generate_for_while(struct node *statement, char function_name[]) {
 			ir_operand_copy(break_label, 0, &branch_instruction->operands[1]);
 
 			// Inside the loop
-			ir_generate_for_statement(statement->data.while_loop.statement, function_name, continue_label, break_label);
+			ir_generate_for_statement(statement->data.while_loop.statement, function_name, continue_label, break_label, frame_size);
 			statement->ir = ir_concatenate(statement->ir, statement->data.while_loop.statement->ir);
 
 			struct ir_instruction *continue_branch = ir_instruction(IR_GOTO);
@@ -1770,7 +1783,7 @@ void ir_generate_for_while(struct node *statement, char function_name[]) {
 			ir_operand_label(break_label, 0);
 
 			// Inside the do
-			ir_generate_for_statement(statement->data.while_loop.statement, function_name, continue_label, break_label);
+			ir_generate_for_statement(statement->data.while_loop.statement, function_name, continue_label, break_label, frame_size);
 			statement->ir = ir_concatenate(statement->ir, statement->data.while_loop.statement->ir);
 
 			// Evaluate the expression
@@ -1791,7 +1804,7 @@ void ir_generate_for_while(struct node *statement, char function_name[]) {
 
 		// FOR
 		case 2:
-			ir_generate_for_for(statement, function_name);
+			ir_generate_for_for(statement, function_name, frame_size);
 			break;
 	}
 }
@@ -1808,7 +1821,7 @@ void ir_generate_for_while(struct node *statement, char function_name[]) {
  * Side-effects:
  *   Memory may be allocated on the heap.
  */
-void ir_generate_for_jump(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk) {
+void ir_generate_for_jump(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk, int frame_size) {
 	struct ir_instruction *branch_instruction = ir_instruction(IR_GOTO);
 	switch (statement->data.jump.type) {
 	    /* GOTO */
@@ -1876,6 +1889,13 @@ void ir_generate_for_jump(struct node *statement, char function_name[], struct i
 	      }
 
 	      statement->ir = ir_append(statement->ir, return_instruction);
+
+	      struct ir_instruction *proc_end = ir_instruction(IR_PROC_END);
+	      proc_end->operands[0].kind = OPERAND_LABEL;
+	      proc_end->operands[0].data.label_name = function_name;
+	      proc_end->operands[1].kind = OPERAND_NUMBER;
+	      proc_end->operands[1].data.number = frame_size;
+	      statement->ir = ir_append(statement->ir, proc_end);
 	      break;
 
 	    default:
@@ -1900,8 +1920,7 @@ int ir_set_symbol_table_offsets(struct symbol_table *table, int overhead){
 	  for (iter = table->variables; NULL != iter; iter = iter->next) {
 	    int size = 4;
 	    int array_size = 0;
-//	    if (iter->symbol.result == NULL)
-//	    	break;
+
 	    if(iter->symbol.result.type->kind == TYPE_BASIC)
 	    {
 	    	if(iter->symbol.result.type->data.basic.width == TYPE_WIDTH_CHAR)
@@ -2017,28 +2036,6 @@ char *ir_get_name(struct node *declarator) {
 	}
 }
 
-//void ir_preserve_across_call(struct ir_section *section) {
-//	struct ir_instruction *instruction = section->last;
-//	struct ir_instruction *inner_instruction;
-//
-//	int dist = 0;
-//
-//	while(instruction != section->first->prev)
-//	{
-//		if(instruction->kind == IR_FUNCTION_CALL)
-//		{
-//			inner_instruction = instruction->prev;
-//			while(inner_instruction->kind != IR_SEQUENCE_PT)
-//			{
-//				inner_instruction = inner_instruction->prev;
-//			}
-//			dist = inner_instruction->operands[0].data.number -
-//
-//		}
-//		instruction = instruction->prev;
-//	}
-//}
-
 /* ir_generate_for_function_definition - sets symbol table offsets, gets function
  *   name, generates proc_begin and proc_end and calls generate for statement
  *
@@ -2103,17 +2100,23 @@ void ir_generate_for_function_definition(struct node *statement) {
 
 	}
 
-	ir_generate_for_statement(statement->data.function_definition.compound, function_name, NULL, NULL);
+	ir_generate_for_statement(statement->data.function_definition.compound, function_name, NULL, NULL, type->data.func.frame_size);
 	statement->ir = ir_concatenate(statement->ir, statement->data.function_definition.compound->ir);
 
 //	ir_preserve_across_call(statement->ir);
 
-	struct ir_instruction *proc_end = ir_instruction(IR_PROC_END);
-	ir_operand_copy(proc_end, 0, &proc_begin->operands[0]);
-	ir_operand_copy(proc_end, 1, &proc_begin->operands[1]);
+	// Proc end is either handled by the explicit return statement, or here, if there's
+	// only an implied return.
+	if(type->data.func.return_type->kind == TYPE_VOID)
+	{
+		struct ir_instruction *proc_end = ir_instruction(IR_PROC_END);
+
+		ir_operand_copy(proc_end, 0, &proc_begin->operands[0]);
+		ir_operand_copy(proc_end, 1, &proc_begin->operands[1]);
 
 
-	ir_append(statement->ir, proc_end);
+		ir_append(statement->ir, proc_end);
+	}
 }
 
 /* symbol_add_from_statement - just like add_from_expression, but for statements
@@ -2124,25 +2127,25 @@ void ir_generate_for_function_definition(struct node *statement) {
  *   cont - ir_instruction - instruction with label for continue statements
  *   brk - ir_instruction - instruction with label for break statements
  */
-void ir_generate_for_statement(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk) {
+void ir_generate_for_statement(struct node *statement, char function_name[], struct ir_instruction *cont, struct ir_instruction *brk, int frame_size) {
   assert(NULL != statement);
   struct ir_instruction *dummy_instruction;
   struct ir_instruction *sequence_point = ir_instruction(IR_SEQUENCE_PT);
   switch (statement->kind) {
     case NODE_LABELED_STATEMENT:
-      ir_generate_for_labeled_statement(statement, function_name, cont, brk);
+      ir_generate_for_labeled_statement(statement, function_name, cont, brk, frame_size);
       break;
     case NODE_COMPOUND:
-      ir_generate_for_compound(statement, function_name, cont, brk);
+      ir_generate_for_compound(statement, function_name, cont, brk, frame_size);
       break;
     case NODE_CONDITIONAL:
-      ir_generate_for_conditional(statement, function_name, cont, brk);
+      ir_generate_for_conditional(statement, function_name, cont, brk, frame_size);
       break;
     case NODE_WHILE:
-      ir_generate_for_while(statement, function_name);
+      ir_generate_for_while(statement, function_name, frame_size);
       break;
     case NODE_JUMP:
-      ir_generate_for_jump(statement, function_name, cont, brk);
+      ir_generate_for_jump(statement, function_name, cont, brk, frame_size);
       break;
     case NODE_SEMI_COLON:
     	dummy_instruction = ir_instruction(IR_NO_OPERATION);
@@ -2184,13 +2187,138 @@ void ir_generate_for_translation_unit(struct node *unit) {
 
   if (NULL != init) {
     ir_generate_for_translation_unit(init);
-    ir_generate_for_statement(statement, NULL, NULL, NULL);
+    ir_generate_for_statement(statement, NULL, NULL, NULL, 0);
     unit->ir = ir_concatenate(init->ir, statement->ir);
   } else {
-    ir_generate_for_statement(statement, NULL, NULL, NULL);
+    ir_generate_for_statement(statement, NULL, NULL, NULL, 0);
     unit->ir = statement->ir;
   }
 }
+
+void ir_garbage_collect(struct ir_section *ir) {
+	struct ir_instruction *iter = ir->first;
+	struct ir_instruction *clip;
+	while(iter != NULL)
+	{
+		if(iter->kind == IR_PROC_END ||
+				iter->kind == IR_GOTO)
+		{
+			// This should be a sequence point
+			iter = iter->next;
+			clip = iter;
+
+			while(clip->kind != IR_LABEL &&
+					clip->kind != IR_PROC_BEGIN)
+			{
+				clip = clip->next;
+			}
+			iter->next = clip;
+			clip->prev = iter;
+		}
+		iter = iter->next;
+	}
+}
+
+void ir_tail_recursion(struct ir_section *ir) {
+	struct ir_instruction *iter = ir->last;
+	struct ir_instruction *end;
+	char function_name[31];
+	int args[4];
+	int num_args = 0;
+
+	while(iter != NULL)
+	{
+		num_args = 0;
+
+		if(iter->kind == IR_RETURN)
+		{
+			if(iter->prev->kind == IR_RESULT_WORD)
+			{
+				// Save the next instruction
+				end = iter->next;
+				strcpy(function_name, end->operands[0].data.label_name);
+
+				// Cut out return and result instructions
+				// This should be the result word, which we cut
+				iter = iter->prev;
+				assert(iter->kind == IR_RESULT_WORD);
+				iter = iter->prev;
+
+				// Now we should be looking at the function call, itself
+				assert(iter->kind == IR_FUNCTION_CALL);
+				if(strcmp(function_name, iter->operands[0].data.label_name) != 0)
+					continue;
+
+				// Remove it, as well
+				iter->prev->next = end;
+				end->prev = iter->prev;
+				iter = iter->prev;
+
+				while(iter->kind != IR_PROC_BEGIN)
+				{
+					if(iter->kind == IR_PARAMETER)
+					{
+						int i = (int)iter->operands[0].data.number;
+						args[i] = iter->operands[1].data.temporary;
+
+						// Cut out the parameter instruction
+						iter->prev->next = iter->next;
+						iter->next->prev = iter->prev;
+						num_args++;
+					}
+					iter = iter->prev;
+				}
+				// Now we should have the proc begin, which is where we branch to
+				assert(iter->kind == IR_PROC_BEGIN);
+				{
+					// Insert label at top of function
+					struct ir_instruction *label = ir_instruction(IR_LABEL);
+					ir_operand_label(label, 0);
+					label->next = iter->next;
+					label->prev = iter;
+					iter->next->prev = label;
+					iter->next = label;
+
+					// Branch to top goes at the end
+					struct ir_instruction *branch = ir_instruction(IR_GOTO);
+					ir_operand_copy(branch, 0, &label->operands[0]);
+
+					struct ir_instruction *dummy = ir_instruction(IR_NO_OPERATION);
+					struct ir_section *sec = ir_section(dummy, dummy);
+
+					int j;
+					for(j = 0; j < num_args; j++)
+					{
+						struct ir_instruction *store = ir_instruction(IR_STORE_WORD);
+						store->operands[1].kind = OPERAND_LVALUE;
+						store->operands[1].data.offset = j * 4;
+						store->operands[0].kind = OPERAND_TEMPORARY;
+						store->operands[0].data.temporary = args[j];
+						sec = ir_append(sec, store);
+					}
+
+
+					sec->last->next = branch;
+					branch->prev = sec->last;
+
+					end->prev->next = sec->first;
+					sec->first->prev = end->prev;
+
+					branch->next = end;
+					end->prev = branch;
+				}
+			}
+		}
+		iter = iter->prev;
+	}
+}
+
+void ir_generate_for_program(struct node *unit) {
+	ir_generate_for_translation_unit(unit);
+//	ir_garbage_collect(unit->ir);
+	ir_tail_recursion(unit->ir);
+}
+
 
 /**********************
  * PRINT INSTRUCTIONS *
