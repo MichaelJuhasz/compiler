@@ -498,7 +498,6 @@ int ir_simplify_binary(struct node *binary_operation, struct ir_operand *op, int
 		case OP_ASTERISK:
 		case OP_SLASH:
 		case OP_PERCENT:
-			break;
 			ir_return_zero(binary_operation);
 			return 1;
 
@@ -2200,17 +2199,17 @@ void ir_garbage_collect(struct ir_section *ir) {
 	struct ir_instruction *clip;
 	while(iter != NULL)
 	{
-		if(iter->kind == IR_PROC_END ||
-				iter->kind == IR_GOTO)
+		if((iter->kind == IR_PROC_END ||
+				iter->kind == IR_GOTO))
 		{
-			// This should be a sequence point
-			iter = iter->next;
 			clip = iter;
 
 			while(clip->kind != IR_LABEL &&
 					clip->kind != IR_PROC_BEGIN)
 			{
 				clip = clip->next;
+				if(clip == NULL)
+					return;
 			}
 			iter->next = clip;
 			clip->prev = iter;
@@ -2315,8 +2314,8 @@ void ir_tail_recursion(struct ir_section *ir) {
 
 void ir_generate_for_program(struct node *unit) {
 	ir_generate_for_translation_unit(unit);
-//	ir_garbage_collect(unit->ir);
 	ir_tail_recursion(unit->ir);
+	ir_garbage_collect(unit->ir);
 }
 
 
