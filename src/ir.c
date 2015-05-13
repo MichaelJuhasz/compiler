@@ -383,6 +383,16 @@ void ir_generate_for_numeric_unary(int kind, struct node *unary_operation) {
 	  unary_operation->data.unary_operation.result.ir_operand = &instruction->operands[0];
 }
 
+// This function borrowed from: http://www.exploringbinary.com/ten-ways-to-check-if-an-integer-is-a-power-of-two-in-c/
+int is_power_of_two(long result) {
+	if(result < 0)
+		return 0;
+	else
+	{
+		return ((result != 0) && !(result & (result - 1)));
+	}
+}
+
 void ir_constant_folding_bi(struct node *binary_operation, long left, long right) {
 	  long result;
 
@@ -528,7 +538,7 @@ int ir_simplify_binary(struct node *binary_operation, struct ir_operand *op, int
 			break;
 		}
 	}
-	else if(result % 2 == 0)
+	else if(is_power_of_two(result))
 	{
 		if(!left_side)
 		{
@@ -1877,6 +1887,7 @@ void ir_generate_for_jump(struct node *statement, char function_name[], struct i
 	      {
 		      return_instruction = ir_instruction(IR_RETURN);
 	    	  ir_generate_for_expression(statement->data.jump.expr);
+
 	    	  statement->ir = ir_copy(statement->data.jump.expr->ir);
 	    	  struct ir_operand *op = node_get_result(statement->data.jump.expr)->ir_operand;
 	    	  op = ir_convert_l_to_r(op, statement->ir, statement->data.jump.expr);
@@ -1948,7 +1959,7 @@ int ir_set_symbol_table_offsets(struct symbol_table *table, int overhead){
 	    	// Here be arrays
 	    	if (iter->symbol.result.type->data.pointer.size > 1)
 	    	{
-	    		int array_size = 4;
+	    		array_size = 4;
 
 	    		if(iter->symbol.result.type->data.pointer.type->kind == TYPE_BASIC)
 	    		{
@@ -2205,7 +2216,8 @@ void ir_garbage_collect(struct ir_section *ir) {
 			clip = iter;
 
 			while(clip->kind != IR_LABEL &&
-					clip->kind != IR_PROC_BEGIN)
+					clip->kind != IR_PROC_BEGIN &&
+					clip->kind != IR_SEQUENCE_PT)
 			{
 				clip = clip->next;
 				if(clip == NULL)
