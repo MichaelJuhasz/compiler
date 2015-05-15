@@ -13,6 +13,377 @@ int ir_generation_num_errors;
 char *string_labels[1000];
 int string_labels_len = 0;
 
+/********************
+ * UTITLITY METHODS *
+ ********************/
+
+/* ir_get_name - helper for function_definition, just grabs the function name
+ *   from which ever type of node holds it
+ *
+ * Parameters:
+ *   declarator - node - some kind of declarator node
+ *
+ * Returns a "string" with function name, if found
+ */
+char *ir_get_name(struct node *declarator) {
+	switch (declarator->kind)
+	{
+	case NODE_IDENTIFIER:
+		return declarator->data.identifier.symbol->name;
+	case NODE_FUNCTION_DECLARATOR:
+		return ir_get_name(declarator->data.function_declarator.dir_dec);
+	case NODE_ARRAY_DECLARATOR:
+		return ir_get_name(declarator->data.array_declarator.dir_dec);
+	case NODE_POINTER_DECLARATOR:
+		return ir_get_name(declarator->data.pointer_declarator.declarator);
+	default:
+		printf("Can't find node's name.");
+		return 0;
+	}
+}
+
+/*ir_constrant_check - checks to see if a binary operand contains a constant
+ *
+ * Paramenters:
+ * 		node - node - the operand
+ *
+ * Returns "true" if the node is of time number, or if the last instruction was a li
+ */
+int ir_constant_check(struct node *node) {
+	if(node->kind == NODE_NUMBER)
+	{
+		return 1;
+	}
+	else if(node->ir->last->kind == IR_LOAD_IMMEDIATE)
+	{
+		return 1;
+	}
+	return 0;
+}
+
+/* ir_get_constant - gets the value of a constant from a node, or instruction
+ *
+ * Parameters:
+ * 		node - node - the operand
+ *
+ * Returns the long value of the constant
+ */
+long ir_get_constant(struct node *node)
+{
+	if(node->kind == NODE_NUMBER)
+	{
+		return node->data.number.value;
+	}
+	else
+	{
+		return node->ir->last->operands[1].data.number;
+	}
+}
+
+/* ir_return_zero - appends instructions to immediately load a zero
+ *
+ * Parameters:
+ * 		node - node - a binary operation node, to add ir to
+ *
+ * Side-effects:
+ * 		Memory may be allocated on the heap.
+ */
+void ir_return_zero(struct node *node)
+{
+	struct ir_instruction *li = ir_instruction(IR_LOAD_IMMEDIATE);
+	ir_operand_temporary(li, 0);
+	li->operands[1].kind = OPERAND_NUMBER;
+	li->operands[1].data.number = 0;
+	node->ir = ir_section(li, li);
+	node->data.binary_operation.result.ir_operand = &li->operands[0];
+}
+
+/* ir_simplify_binary - optimizes various binary operands, identities, etc.
+ *
+ * Parameters:
+ * 		binary_operation - node - a binary operation node
+ * 		op - ir_operand - the non-constant operand
+ * 		result - int - the value of the constant operand
+ * 		left_size - int - "true" if non-constant operand is on the left
+ *
+ * Returns "true" if ir is added, which will trigger an early exit from binary operation ir generation
+ *
+ * Side-effects:
+ * 		Memory may be allocated on the heap.
+ */
+int ir_simplify_binary(struct node *binary_operation, struct ir_operand *op, int result, int left_side)
+{
+
+	struct node *node = binary_operation->data.binary_operation.left_operand;
+	if(left_side)
+	{
+		node = binary_operation->data.binary_operation.right_operand;
+	}
+	if(result == 0)
+	{
+		switch(binary_operation->data.binary_operation.operation)
+		{
+		case OP_GREATER_GREATER:
+		case OP_LESS_LESS:
+			if(left_side)
+			{
+				ir_return_zero(binary_operation);
+				return 1;
+			}
+		case OP_MINUS:
+			if(left_side)
+				break;
+		case OP_PLUS:
+		case OP_VBAR:
+		case OP_AMPERSAND:
+	    	  binary_operation->ir = ir_copy(node->ir);
+	    	  op = ir_convert_l_to_r(op, binary_operation->ir, node);
+			  binary_operation->data.binary_operation.result.ir_operand = op;
+			  return 1;
+		case OP_CARET:
+		case OP_ASTERISK:
+		case OP_SLASH:
+		case OP_PERCENT:
+			ir_return_zero(binary_operation);
+			return 1;
+
+		default:
+			return 0;
+		}
+	}
+	else if(result == 1)
+	{
+		switch(binary_operation->data.binary_operation.operation)
+		{
+		case OP_SLASH:
+			if(left_side)
+				break;
+		case OP_ASTERISK:
+	    	  binary_operation->ir = ir_copy(node->ir);
+	    	  op = ir_convert_l_to_r(op, binary_operation->ir, node);
+			  binary_operation->data.binary_operation.result.ir_operand = op;
+			  return 1;
+		case OP_PERCENT:
+			if(!left_side)
+			{
+				ir_return_zero(binary_operation);
+				return 1;
+			}
+			else break;
+		default:
+			break;
+		}
+	}
+	else if(is_power_of_two(result))
+	{
+		if(!left_side)
+		{
+			if(binary_operation->data.binary_operation.operation == OP_ASTERISK ||
+				binary_operation->data.binary_operation.operation == OP_SLASH)
+			{
+
+		    	binary_operation->ir = ir_copy(node->ir);
+		    	op = ir_convert_l_to_r(op, binary_operation->ir, node);
+				int direction = IR_SHIFT_RIGHT;
+				if(binary_operation->data.binary_operation.operation == OP_ASTERISK)
+					direction = IR_SHIFT_LEFT;
+				result = log(result)/log(2);
+				struct ir_instruction *li = ir_instruction(IR_LOAD_IMMEDIATE);
+				ir_operand_temporary(li, 0);
+				li->operands[1].kind = OPERAND_NUMBER;
+				li->operands[1].data.number = result;
+
+				struct ir_instruction *shift = ir_instruction(direction);
+				ir_operand_temporary(shift, 0);
+				ir_operand_copy(shift, 1, op);
+				ir_operand_copy(shift, 2, &li->operands[0]);
+
+				binary_operation->ir = ir_append(binary_operation->ir, li);
+				binary_operation->ir = ir_append(binary_operation->ir, shift);
+				binary_operation->data.binary_operation.result.ir_operand = &shift->operands[0];
+				return 1;
+			}
+		}
+	}
+	return 0;
+}
+
+// This function borrowed from: http://www.exploringbinary.com/ten-ways-to-check-if-an-integer-is-a-power-of-two-in-c/
+int is_power_of_two(long result) {
+	if(result < 0)
+		return 0;
+	else
+	{
+		return ((result != 0) && !(result & (result - 1)));
+	}
+}
+
+/* ir_constant_folding_bi - actually the only constant folding method, only ever called by binary operations
+ *
+ * Parameters:
+ * 		binary_operation - node
+ * 		left - long - the value of the left operand
+ * 		right - long - the value of the right operand
+ *
+ *  Side-effects:
+ * 		Memory may be allocated on the heap.
+ */
+void ir_constant_folding_bi(struct node *binary_operation, long left, long right) {
+	  long result;
+
+	  switch(binary_operation->data.binary_operation.operation)
+	  {
+	  case OP_ASTERISK:
+		  result = left * right;
+		  break;
+	  case OP_SLASH:
+		  result = left / right;
+		  break;
+	  case OP_PLUS:
+		  result = left + right;
+		  break;
+	  case OP_MINUS:
+		  result = left - right;
+		  break;
+	  case OP_AMPERSAND:
+		  result = left & right;
+		  break;
+	  case OP_PERCENT:
+		  result = left % right;
+		  break;
+	  case OP_LESS_LESS:
+		  result = left << right;
+		  break;
+	  case OP_GREATER_GREATER:
+		  result = left >> right;
+		  break;
+	  case OP_VBAR:
+		  result = left | right;
+		  break;
+	  case OP_CARET:
+		  result = left ^ right;
+		  break;
+	  default:
+		  assert(0);
+		  break;
+	  }
+
+	  struct ir_instruction *li = ir_instruction(IR_LOAD_IMMEDIATE);
+	  ir_operand_temporary(li, 0);
+	  li->operands[1].kind = OPERAND_NUMBER;
+	  li->operands[1].data.number = result;
+	  binary_operation->ir = ir_section(li, li);
+	  binary_operation->data.binary_operation.result.ir_operand = &li->operands[0];
+}
+
+
+/* ir_set_symbol_table_offsets - helper function that walks through symbol
+ *   table and sets identifiers' offsets
+ *
+ * Parameters:
+ *   table - symbol_table - the calling function's child table
+ *   overhead - int - space on the stack already occupied
+ *
+ * Returns an integer that is the number of bytes needed for the stack frame
+ */
+int ir_set_symbol_table_offsets(struct symbol_table *table, int overhead){
+	// Borrowed from symbol table print function
+	  struct symbol_list *iter;
+
+	  for (iter = table->variables; NULL != iter; iter = iter->next) {
+	    int size = 4;
+	    int array_size = 0;
+
+	    if(iter->symbol.result.type->kind == TYPE_BASIC)
+	    {
+	    	if(iter->symbol.result.type->data.basic.width == TYPE_WIDTH_CHAR)
+	    		size = 1;
+	    	else if(iter->symbol.result.type->data.basic.width == TYPE_WIDTH_SHORT)
+	    		size = 2;
+	    }
+	    else if (iter->symbol.result.type->kind == TYPE_ARRAY)
+	    {
+	    	if (iter->symbol.result.type->data.array.len > 1)
+	    	{
+	    		array_size = 4;
+
+	    		if(iter->symbol.result.type->data.array.type->kind == TYPE_BASIC)
+	    		{
+	    			if(iter->symbol.result.type->data.array.type->data.basic.width == TYPE_WIDTH_CHAR)
+	    				array_size = 1;
+	    			else if(iter->symbol.result.type->data.array.type->data.basic.width == TYPE_WIDTH_SHORT)
+	    				array_size = 2;
+	    		}
+	    		size = iter->symbol.result.type->data.array.len * array_size;
+	    	}
+	    }
+	    else if (iter->symbol.result.type->kind == TYPE_POINTER)
+	    {
+	    	// Here be arrays
+	    	if (iter->symbol.result.type->data.pointer.size > 1)
+	    	{
+	    		array_size = 4;
+
+	    		if(iter->symbol.result.type->data.pointer.type->kind == TYPE_BASIC)
+	    		{
+	    			if(iter->symbol.result.type->data.pointer.type->data.basic.width == TYPE_WIDTH_CHAR)
+	    				array_size = 1;
+	    			else if(iter->symbol.result.type->data.pointer.type->data.basic.width == TYPE_WIDTH_SHORT)
+	    				array_size = 2;
+	    		}
+	    		// pointer -> overhead;
+	    		array_size = iter->symbol.result.type->data.pointer.size * array_size;
+	    	}
+	    }
+
+
+	    iter->symbol.result.offset = malloc(sizeof(struct ir_operand));
+	    iter->symbol.result.offset->kind = OPERAND_LVALUE;
+
+	    if(iter->symbol.result.type->is_param != 1)
+	    {
+		    // Align halfwords
+		    if(size == 2)
+		    {
+		    	overhead = ((overhead + 1) / 2) * 2;
+		    }
+
+		    // Align words
+		    else if (size == 4)
+		    {
+		    	overhead = ((overhead + 3) / 4) * 4;
+		    }
+
+		    iter->symbol.result.offset->data.offset = overhead;
+		    overhead += size;
+	    }
+	    else
+	    {
+		    iter->symbol.result.offset->data.offset = iter->symbol.result.type->param_num * 4;
+	    }
+
+	    // If there's an array, it will sit just below the pointer to it.
+	    overhead += array_size;
+
+	  }
+
+	  // Now walk through child tables, calling this function recursively and so that
+	  // each table at the same depth overlaps its offsets
+	  struct table_list *iter_tb;
+
+	  if (table->children != NULL)
+	  {
+		  iter_tb = table->children;
+		  while (iter_tb != NULL)
+		  {
+			 ir_set_symbol_table_offsets(iter_tb->child, overhead);
+			 iter_tb = iter_tb->next;
+		  }
+	  }
+
+	  return overhead;
+}
+
 /************************
  * CREATE IR STRUCTURES *
  ************************/
@@ -383,195 +754,6 @@ void ir_generate_for_numeric_unary(int kind, struct node *unary_operation) {
 	  unary_operation->data.unary_operation.result.ir_operand = &instruction->operands[0];
 }
 
-// This function borrowed from: http://www.exploringbinary.com/ten-ways-to-check-if-an-integer-is-a-power-of-two-in-c/
-int is_power_of_two(long result) {
-	if(result < 0)
-		return 0;
-	else
-	{
-		return ((result != 0) && !(result & (result - 1)));
-	}
-}
-
-void ir_constant_folding_bi(struct node *binary_operation, long left, long right) {
-	  long result;
-
-	  switch(binary_operation->data.binary_operation.operation)
-	  {
-	  case OP_ASTERISK:
-		  result = left * right;
-		  break;
-	  case OP_SLASH:
-		  result = left / right;
-		  break;
-	  case OP_PLUS:
-		  result = left + right;
-		  break;
-	  case OP_MINUS:
-		  result = left - right;
-		  break;
-	  case OP_AMPERSAND:
-		  result = left & right;
-		  break;
-	  case OP_PERCENT:
-		  result = left % right;
-		  break;
-	  case OP_LESS_LESS:
-		  result = left << right;
-		  break;
-	  case OP_GREATER_GREATER:
-		  result = left >> right;
-		  break;
-	  case OP_VBAR:
-		  result = left | right;
-		  break;
-	  case OP_CARET:
-		  result = left ^ right;
-		  break;
-	  default:
-		  assert(0);
-		  break;
-	  }
-
-	  struct ir_instruction *li = ir_instruction(IR_LOAD_IMMEDIATE);
-	  ir_operand_temporary(li, 0);
-	  li->operands[1].kind = OPERAND_NUMBER;
-	  li->operands[1].data.number = result;
-	  binary_operation->ir = ir_section(li, li);
-	  binary_operation->data.binary_operation.result.ir_operand = &li->operands[0];
-}
-
-int ir_constant_check(struct node *node) {
-	if(node->kind == NODE_NUMBER)
-	{
-		return 1;
-	}
-	else if(node->ir->last->kind == IR_LOAD_IMMEDIATE)
-	{
-		return 1;
-	}
-	return 0;
-}
-
-long ir_get_constant(struct node *node)
-{
-	if(node->kind == NODE_NUMBER)
-	{
-		return node->data.number.value;
-	}
-	else
-	{
-		return node->ir->last->operands[1].data.number;
-	}
-}
-
-void ir_return_zero(struct node *node)
-{
-	struct ir_instruction *li = ir_instruction(IR_LOAD_IMMEDIATE);
-	ir_operand_temporary(li, 0);
-	li->operands[1].kind = OPERAND_NUMBER;
-	li->operands[1].data.number = 0;
-	node->ir = ir_section(li, li);
-	node->data.binary_operation.result.ir_operand = &li->operands[0];
-}
-
-int ir_simplify_binary(struct node *binary_operation, struct ir_operand *op, int result, int left_side)
-{
-
-	struct node *node = binary_operation->data.binary_operation.left_operand;
-	if(left_side)
-	{
-		node = binary_operation->data.binary_operation.right_operand;
-	}
-	if(result == 0)
-	{
-		switch(binary_operation->data.binary_operation.operation)
-		{
-		case OP_GREATER_GREATER:
-		case OP_LESS_LESS:
-			if(left_side)
-			{
-				ir_return_zero(binary_operation);
-				return 1;
-			}
-		case OP_MINUS:
-			if(left_side)
-				break;
-		case OP_PLUS:
-		case OP_VBAR:
-		case OP_AMPERSAND:
-	    	  binary_operation->ir = ir_copy(node->ir);
-	    	  op = ir_convert_l_to_r(op, binary_operation->ir, node);
-			  binary_operation->data.binary_operation.result.ir_operand = op;
-			  return 1;
-		case OP_CARET:
-		case OP_ASTERISK:
-		case OP_SLASH:
-		case OP_PERCENT:
-			ir_return_zero(binary_operation);
-			return 1;
-
-		default:
-			return 0;
-		}
-	}
-	else if(result == 1)
-	{
-		switch(binary_operation->data.binary_operation.operation)
-		{
-		case OP_SLASH:
-			if(left_side)
-				break;
-		case OP_ASTERISK:
-	    	  binary_operation->ir = ir_copy(node->ir);
-	    	  op = ir_convert_l_to_r(op, binary_operation->ir, node);
-			  binary_operation->data.binary_operation.result.ir_operand = op;
-			  return 1;
-		case OP_PERCENT:
-			if(!left_side)
-			{
-				ir_return_zero(binary_operation);
-				return 1;
-			}
-			else break;
-		default:
-			break;
-		}
-	}
-	else if(is_power_of_two(result))
-	{
-		if(!left_side)
-		{
-			if(binary_operation->data.binary_operation.operation == OP_ASTERISK ||
-				binary_operation->data.binary_operation.operation == OP_SLASH)
-			{
-
-		    	binary_operation->ir = ir_copy(node->ir);
-		    	op = ir_convert_l_to_r(op, binary_operation->ir, node);
-				int direction = IR_SHIFT_RIGHT;
-				if(binary_operation->data.binary_operation.operation == OP_ASTERISK)
-					direction = IR_SHIFT_LEFT;
-				result = log(result)/log(2);
-				struct ir_instruction *li = ir_instruction(IR_LOAD_IMMEDIATE);
-				ir_operand_temporary(li, 0);
-				li->operands[1].kind = OPERAND_NUMBER;
-				li->operands[1].data.number = result;
-
-				struct ir_instruction *shift = ir_instruction(direction);
-				ir_operand_temporary(shift, 0);
-				ir_operand_copy(shift, 1, op);
-				ir_operand_copy(shift, 2, &li->operands[0]);
-
-				binary_operation->ir = ir_append(binary_operation->ir, li);
-				binary_operation->ir = ir_append(binary_operation->ir, shift);
-				binary_operation->data.binary_operation.result.ir_operand = &shift->operands[0];
-				return 1;
-			}
-		}
-	}
-	return 0;
-}
-
 /* ir_generate_for_arithmetic_binary_operation - adds a binary operation instructions 
  *  Calls convert_l_to_r in case of lvalue operands and pointer_arithmetic in case of pointers
  *
@@ -846,7 +1028,7 @@ void ir_generate_for_unary_operation(struct node *unary_operation) {
 	    	ir_generate_for_numeric_unary(IR_BIT_NOT, unary_operation);
 	    	break;
 
-	    // TODO Yeah...
+	    // TODO This needed to be disabled for arrays to work.  This would be an obvious place for improvement
 	    case OP_ASTERISK:;
 	  	  struct ir_operand *op = node_get_result(unary_operation->data.unary_operation.operand)->ir_operand;
 //	    	op = ir_convert_l_to_r(op, unary_operation->ir, unary_operation->data.unary_operation.operand);
@@ -862,13 +1044,6 @@ void ir_generate_for_unary_operation(struct node *unary_operation) {
 	    	break;
 
 	    case OP_AMPERSAND:
-//	    	id_node = unary_operation->data.unary_operation.operand;
-//	    	assert(id_node->kind == NODE_IDENTIFIER);
-//
-//	    	instruction = ir_instruction(IR_ADDRESS_OF);
-//	    	ir_operand_temporary(instruction, 0);
-//	    	ir_operand_copy(instruction, 1, id_node->data.identifier.symbol->result.ir_operand);
-//	    	ir_append(unary_operation->ir, instruction);
 	    	unary_operation->data.unary_operation.result.ir_operand = &unary_operation->ir->last->operands[0];
 	    	break;
 	  }
@@ -931,7 +1106,6 @@ struct ir_operand *ir_convert_to_zero_one(struct ir_operand *result, struct ir_s
  *   Memory may be allocated on the heap.
  *
  */
- /* TODO result value should be one or zero */
 void ir_generate_for_log_and_or(struct node *binary_operation, int is_or) {
 	ir_generate_for_expression(binary_operation->data.binary_operation.left_operand);
 	binary_operation->ir = binary_operation->data.binary_operation.left_operand->ir;
@@ -1914,138 +2088,6 @@ void ir_generate_for_jump(struct node *statement, char function_name[], struct i
 	  }
 }
 
-/* ir_set_symbol_table_offsets - helper function that walks through symbol
- *   table and sets identifiers' offsets 
- *
- * Parameters: 
- *   table - symbol_table - the calling function's child table 
- *   overhead - int - space on the stack already occupied
- * 
- * Returns an integer that is the number of bytes needed for the stack frame
- */
-int ir_set_symbol_table_offsets(struct symbol_table *table, int overhead){
-	// Borrowed from symbol table print function
-	  struct symbol_list *iter;
-
-	  for (iter = table->variables; NULL != iter; iter = iter->next) {
-	    int size = 4;
-	    int array_size = 0;
-
-	    if(iter->symbol.result.type->kind == TYPE_BASIC)
-	    {
-	    	if(iter->symbol.result.type->data.basic.width == TYPE_WIDTH_CHAR)
-	    		size = 1;
-	    	else if(iter->symbol.result.type->data.basic.width == TYPE_WIDTH_SHORT)
-	    		size = 2;
-	    }
-	    else if (iter->symbol.result.type->kind == TYPE_ARRAY)
-	    {
-	    	if (iter->symbol.result.type->data.array.len > 1)
-	    	{
-	    		array_size = 4;
-
-	    		if(iter->symbol.result.type->data.array.type->kind == TYPE_BASIC)
-	    		{
-	    			if(iter->symbol.result.type->data.array.type->data.basic.width == TYPE_WIDTH_CHAR)
-	    				array_size = 1;
-	    			else if(iter->symbol.result.type->data.array.type->data.basic.width == TYPE_WIDTH_SHORT)
-	    				array_size = 2;
-	    		}
-	    		size = iter->symbol.result.type->data.array.len * array_size;
-	    	}
-	    }
-	    else if (iter->symbol.result.type->kind == TYPE_POINTER)
-	    {
-	    	// Here be arrays
-	    	if (iter->symbol.result.type->data.pointer.size > 1)
-	    	{
-	    		array_size = 4;
-
-	    		if(iter->symbol.result.type->data.pointer.type->kind == TYPE_BASIC)
-	    		{
-	    			if(iter->symbol.result.type->data.pointer.type->data.basic.width == TYPE_WIDTH_CHAR)
-	    				array_size = 1;
-	    			else if(iter->symbol.result.type->data.pointer.type->data.basic.width == TYPE_WIDTH_SHORT)
-	    				array_size = 2;
-	    		}
-	    		// pointer -> overhead;
-	    		array_size = iter->symbol.result.type->data.pointer.size * array_size;
-	    	}
-	    }
-
-
-	    iter->symbol.result.offset = malloc(sizeof(struct ir_operand));
-	    iter->symbol.result.offset->kind = OPERAND_LVALUE;
-
-	    if(iter->symbol.result.type->is_param != 1)
-	    {
-		    // Align halfwords
-		    if(size == 2)
-		    {
-		    	overhead = ((overhead + 1) / 2) * 2;
-		    }
-
-		    // Align words
-		    else if (size == 4)
-		    {
-		    	overhead = ((overhead + 3) / 4) * 4;
-		    }
-
-		    iter->symbol.result.offset->data.offset = overhead;
-		    overhead += size;
-	    }
-	    else
-	    {
-		    iter->symbol.result.offset->data.offset = iter->symbol.result.type->param_num * 4;
-	    }
-
-	    // If there's an array, it will sit just below the pointer to it.
-	    overhead += array_size;
-
-	  }
-
-	  // Now walk through child tables, calling this function recursively and so that
-	  // each table at the same depth overlaps its offsets
-	  struct table_list *iter_tb;
-
-	  if (table->children != NULL)
-	  {
-		  iter_tb = table->children;
-		  while (iter_tb != NULL)
-		  {
-			 ir_set_symbol_table_offsets(iter_tb->child, overhead);
-			 iter_tb = iter_tb->next;
-		  }
-	  }
-
-	  return overhead;
-}
-
-/* ir_get_name - helper for function_definition, just grabs the function name 
- *   from which ever type of node holds it
- *
- * Parameters:
- *   declarator - node - some kind of declarator node 
- *
- * Returns a "string" with function name, if found
- */
-char *ir_get_name(struct node *declarator) {
-	switch (declarator->kind)
-	{
-	case NODE_IDENTIFIER:
-		return declarator->data.identifier.symbol->name;
-	case NODE_FUNCTION_DECLARATOR:
-		return ir_get_name(declarator->data.function_declarator.dir_dec);
-	case NODE_ARRAY_DECLARATOR:
-		return ir_get_name(declarator->data.array_declarator.dir_dec);
-	case NODE_POINTER_DECLARATOR:
-		return ir_get_name(declarator->data.pointer_declarator.declarator);
-	default:
-		printf("Can't find node's name.");
-		return 0;
-	}
-}
-
 /* ir_generate_for_function_definition - sets symbol table offsets, gets function
  *   name, generates proc_begin and proc_end and calls generate for statement
  *
@@ -2079,11 +2121,6 @@ void ir_generate_for_function_definition(struct node *statement) {
 	proc_begin->operands[2].data.number = type->data.func.num_params;
 	statement->ir = ir_section(proc_begin, proc_begin);
 
-	// walk symbol table
-	// find "arrays"
-	// ir_instruction(IR_STORE_WORD) -> (store word wants two temporary operands)
-	// opernad[1] = ir_generate_for_identifier("array")
-	// operand[0] = 4 bytes after "array" offset
 	struct symbol_list *iter;
 	for (iter = table->variables; NULL != iter; iter = iter->next)
 	{
@@ -2112,8 +2149,6 @@ void ir_generate_for_function_definition(struct node *statement) {
 
 	ir_generate_for_statement(statement->data.function_definition.compound, function_name, NULL, NULL, type->data.func.frame_size);
 	statement->ir = ir_concatenate(statement->ir, statement->data.function_definition.compound->ir);
-
-//	ir_preserve_across_call(statement->ir);
 
 	// Proc end is either handled by the explicit return statement, or here, if there's
 	// only an implied return.
