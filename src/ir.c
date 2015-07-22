@@ -13,6 +13,222 @@ int ir_generation_num_errors;
 char *string_labels[1000];
 int string_labels_len = 0;
 
+
+
+/************************
+ * CREATE IR STRUCTURES *
+ ************************/
+
+/*
+ * An IR section is just a list of IR instructions. Each node has an associated
+ * IR section if any code is required to implement it.
+ */
+struct ir_section *ir_section(struct ir_instruction *first, struct ir_instruction *last) {
+  struct ir_section *code;
+  code = malloc(sizeof(struct ir_section));
+  assert(NULL != code);
+
+  code->first = first;
+  code->last = last;
+  return code;
+}
+
+struct ir_section *ir_copy(struct ir_section *orig) {
+  return ir_section(orig->first, orig->last);
+}
+
+/*
+ * This joins two IR sections together into a new IR section.
+ */
+struct ir_section *ir_concatenate(struct ir_section *before, struct ir_section *after) {
+  /* patch the two sections together */
+  before->last->next = after->first;
+  after->first->prev = before->last;
+
+  return ir_section(before->first, after->last);
+}
+
+static struct ir_section *ir_append(struct ir_section *section,
+                                                           struct ir_instruction *instruction) {
+  if (NULL == section) {
+    section = ir_section(instruction, instruction);
+
+  } else if (NULL == section->first || NULL == section->last) {
+    assert(NULL == section->first && NULL == section->last);
+    section->first = instruction;
+    section->last = instruction;
+    instruction->prev = NULL;
+    instruction->next = NULL;
+
+  } else {
+    instruction->next = section->last->next;
+    if (NULL != instruction->next) {
+      instruction->next->prev = instruction;
+    }
+    section->last->next = instruction;
+
+    instruction->prev = section->last;
+    section->last = instruction;
+  }
+  return section;
+}
+
+/*
+ * An IR instruction represents a single 3-address statement.
+ */
+struct ir_instruction *ir_instruction(int kind) {
+  struct ir_instruction *instruction;
+
+  instruction = malloc(sizeof(struct ir_instruction));
+  assert(NULL != instruction);
+
+  instruction->kind = kind;
+
+  instruction->next = NULL;
+  instruction->prev = NULL;
+
+  return instruction;
+}
+
+static void ir_operand_number(struct ir_instruction *instruction, int position, struct node *number) {
+  instruction->operands[position].kind = OPERAND_NUMBER;
+  instruction->operands[position].data.number = number->data.number.value;
+}
+
+static void ir_operand_temporary(struct ir_instruction *instruction, int position) {
+  static int next_temporary;
+  instruction->operands[position].kind = OPERAND_TEMPORARY;
+  instruction->operands[position].data.temporary = next_temporary++;
+}
+
+static void ir_operand_copy(struct ir_instruction *instruction, int position, struct ir_operand *operand) {
+  instruction->operands[position] = *operand;
+}
+
+/* ir_operand_string - makes a new label for string constant, puts the value
+ *                     into a global (*gasp) array of char pointers
+ *
+ * Parameters:
+ *   instruction - ir_instruction - instruction to add label to
+ *   position - int - operand number
+ *   string - node - the node whose string value goes into the array
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
+static void ir_operand_string(struct ir_instruction *instruction, int position, struct node *string) {
+	static int str_count;
+
+	if(str_count > 999)
+	{
+		ir_generation_num_errors++;
+		printf("ERROR - Too many strings!\n");
+	}
+	string_labels[str_count] = string->data.string.contents;
+	string_labels_len++;
+	instruction->operands[position].data.label_name = malloc(256);
+	sprintf(instruction->operands[position].data.label_name,"_StringLabel_%d", str_count++);
+	instruction->operands[position].kind = OPERAND_LABEL;
+}
+
+/* ir_operand_label - makes a generated label operand, sticks it into instruction
+ *
+ * Parameters:
+ *   instruction - ir_instruction - instruction to add label to
+ *   position - int - operand number
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
+static void ir_operand_label(struct ir_instruction *instruction, int position) {
+	static int lbl_count;
+	instruction->operands[position].data.label_name = malloc(256);
+	sprintf(instruction->operands[position].data.label_name, "_GeneratedLabel_%d", lbl_count++);
+	instruction->operands[position].kind = OPERAND_LABEL;
+}
+
+/* ir_pointer_arithmetic_conversion - adds extra instructions for doing
+ *                                    pointer arithmetic (multiply by pointer-type
+ *                                    size)
+ *
+ * Parameters:
+ *   type - type - type of the pointer
+ *   ir - ir_section - section to append instructions to
+ *   right_op - ir_operand - contains the register with the addend
+ *
+ * Side-effects:
+ *   Memory may be allocated on the heap.
+ *
+ */
+struct ir_operand *ir_pointer_arithmetic_conversion(struct type *type, struct ir_section *ir, struct ir_operand *right_op) {
+	  struct ir_instruction *factor_inst, *pointer_inst;
+
+	  int size;
+	  if(type->data.pointer.type->kind == TYPE_BASIC)
+	  {
+		  size = type->data.pointer.type->data.basic.width;
+	  }
+	  else
+		  size = TYPE_WIDTH_POINTER;
+
+	  factor_inst = ir_instruction(IR_LOAD_IMMEDIATE);
+	  ir_operand_temporary(factor_inst, 0);
+	  factor_inst->operands[1].kind = OPERAND_NUMBER;
+	  factor_inst->operands[1].data.number = size;
+	  ir_append(ir, factor_inst);
+
+	  pointer_inst = ir_instruction(IR_MULTIPLY);
+	  ir_operand_temporary(pointer_inst, 0);
+	  ir_operand_copy(pointer_inst, 1, &factor_inst->operands[0]);
+	  ir_operand_copy(pointer_inst, 2, right_op);
+	  ir_append(ir, pointer_inst);
+	  return &pointer_inst->operands[0];
+}
+
+
+struct node *ir_get_id(struct node *node) {
+	switch(node->kind)
+	{
+	case NODE_IDENTIFIER:
+		return node;
+	case NODE_UNARY_OPERATION:
+		return ir_get_id(node->data.unary_operation.operand);
+	case NODE_BINARY_OPERATION:
+		return ir_get_id(node->data.binary_operation.left_operand);
+	case NODE_POSTFIX:
+		return ir_get_id(node->data.postfix.expr);
+	case NODE_PREFIX:
+		return ir_get_id(node->data.prefix.expr);
+	case NODE_CAST:
+		return ir_get_id(node->data.cast.cast);
+	case NODE_COMMA_LIST:
+		return ir_get_id(node->data.comma_list.data);
+	default:
+		assert(0);
+		return NULL;
+	}
+}
+
+int ir_get_id_size(struct node *id_node) {
+	struct type *type = type_get_from_node(id_node);
+	int size = IR_STORE_WORD;
+	if(type->kind == TYPE_BASIC)
+	{
+		if(type->data.basic.width == TYPE_WIDTH_CHAR)
+	 	{
+ 			size = IR_STORE_BYTE;
+		}
+
+ 		if(type->data.basic.width == TYPE_WIDTH_SHORT)
+ 		{
+ 			size = IR_STORE_HALF_WORD;
+ 		}
+ 	}
+	return size;
+}
+
 /********************
  * UTITLITY METHODS *
  ********************/
@@ -382,220 +598,6 @@ int ir_set_symbol_table_offsets(struct symbol_table *table, int overhead){
 	  }
 
 	  return overhead;
-}
-
-/************************
- * CREATE IR STRUCTURES *
- ************************/
-
-/*
- * An IR section is just a list of IR instructions. Each node has an associated
- * IR section if any code is required to implement it.
- */
-struct ir_section *ir_section(struct ir_instruction *first, struct ir_instruction *last) {
-  struct ir_section *code;
-  code = malloc(sizeof(struct ir_section));
-  assert(NULL != code);
-
-  code->first = first;
-  code->last = last;
-  return code;
-}
-
-struct ir_section *ir_copy(struct ir_section *orig) {
-  return ir_section(orig->first, orig->last);
-}
-
-/*
- * This joins two IR sections together into a new IR section.
- */
-struct ir_section *ir_concatenate(struct ir_section *before, struct ir_section *after) {
-  /* patch the two sections together */
-  before->last->next = after->first;
-  after->first->prev = before->last;
-
-  return ir_section(before->first, after->last);
-}
-
-static struct ir_section *ir_append(struct ir_section *section,
-                                                           struct ir_instruction *instruction) {
-  if (NULL == section) {
-    section = ir_section(instruction, instruction);
-
-  } else if (NULL == section->first || NULL == section->last) {
-    assert(NULL == section->first && NULL == section->last);
-    section->first = instruction;
-    section->last = instruction;
-    instruction->prev = NULL;
-    instruction->next = NULL;
-
-  } else {
-    instruction->next = section->last->next;
-    if (NULL != instruction->next) {
-      instruction->next->prev = instruction;
-    }
-    section->last->next = instruction;
-
-    instruction->prev = section->last;
-    section->last = instruction;
-  }
-  return section;
-}
-
-/*
- * An IR instruction represents a single 3-address statement.
- */
-struct ir_instruction *ir_instruction(int kind) {
-  struct ir_instruction *instruction;
-
-  instruction = malloc(sizeof(struct ir_instruction));
-  assert(NULL != instruction);
-
-  instruction->kind = kind;
-
-  instruction->next = NULL;
-  instruction->prev = NULL;
-
-  return instruction;
-}
-
-static void ir_operand_number(struct ir_instruction *instruction, int position, struct node *number) {
-  instruction->operands[position].kind = OPERAND_NUMBER;
-  instruction->operands[position].data.number = number->data.number.value;
-}
-
-static void ir_operand_temporary(struct ir_instruction *instruction, int position) {
-  static int next_temporary;
-  instruction->operands[position].kind = OPERAND_TEMPORARY;
-  instruction->operands[position].data.temporary = next_temporary++;
-}
-
-static void ir_operand_copy(struct ir_instruction *instruction, int position, struct ir_operand *operand) {
-  instruction->operands[position] = *operand;
-}
-
-/* ir_operand_string - makes a new label for string constant, puts the value
- *                     into a global (*gasp) array of char pointers
- *
- * Parameters: 
- *   instruction - ir_instruction - instruction to add label to
- *   position - int - operand number 
- *   string - node - the node whose string value goes into the array
- *
- * Side-effects:
- *   Memory may be allocated on the heap.
- *
- */
-static void ir_operand_string(struct ir_instruction *instruction, int position, struct node *string) {
-	static int str_count;
-
-	if(str_count > 999)
-	{
-		ir_generation_num_errors++;
-		printf("ERROR - Too many strings!\n");
-	}
-	string_labels[str_count] = string->data.string.contents;
-	string_labels_len++;
-	instruction->operands[position].data.label_name = malloc(256);
-	sprintf(instruction->operands[position].data.label_name,"_StringLabel_%d", str_count++);
-	instruction->operands[position].kind = OPERAND_LABEL;
-}
-
-/* ir_operand_label - makes a generated label operand, sticks it into instruction
- *
- * Parameters: 
- *   instruction - ir_instruction - instruction to add label to
- *   position - int - operand number 
- *
- * Side-effects:
- *   Memory may be allocated on the heap.
- *
- */
-static void ir_operand_label(struct ir_instruction *instruction, int position) {
-	static int lbl_count;
-	instruction->operands[position].data.label_name = malloc(256);
-	sprintf(instruction->operands[position].data.label_name, "_GeneratedLabel_%d", lbl_count++);
-	instruction->operands[position].kind = OPERAND_LABEL;
-}
-
-/* ir_pointer_arithmetic_conversion - adds extra instructions for doing
- *                                    pointer arithmetic (multiply by pointer-type 
- *                                    size)
- *
- * Parameters: 
- *   type - type - type of the pointer
- *   ir - ir_section - section to append instructions to 
- *   right_op - ir_operand - contains the register with the addend
- *
- * Side-effects:
- *   Memory may be allocated on the heap.
- *
- */
-struct ir_operand *ir_pointer_arithmetic_conversion(struct type *type, struct ir_section *ir, struct ir_operand *right_op) {
-	  struct ir_instruction *factor_inst, *pointer_inst;
-
-	  int size;
-	  if(type->data.pointer.type->kind == TYPE_BASIC)
-	  {
-		  size = type->data.pointer.type->data.basic.width;
-	  }
-	  else
-		  size = TYPE_WIDTH_POINTER;
-
-	  factor_inst = ir_instruction(IR_LOAD_IMMEDIATE);
-	  ir_operand_temporary(factor_inst, 0);
-	  factor_inst->operands[1].kind = OPERAND_NUMBER;
-	  factor_inst->operands[1].data.number = size;
-	  ir_append(ir, factor_inst);
-
-	  pointer_inst = ir_instruction(IR_MULTIPLY);
-	  ir_operand_temporary(pointer_inst, 0);
-	  ir_operand_copy(pointer_inst, 1, &factor_inst->operands[0]);
-	  ir_operand_copy(pointer_inst, 2, right_op);
-	  ir_append(ir, pointer_inst);
-	  return &pointer_inst->operands[0];
-}
-
-
-struct node *ir_get_id(struct node *node) {
-	switch(node->kind)
-	{
-	case NODE_IDENTIFIER:
-		return node;
-	case NODE_UNARY_OPERATION:
-		return ir_get_id(node->data.unary_operation.operand);
-	case NODE_BINARY_OPERATION:
-		return ir_get_id(node->data.binary_operation.left_operand);
-	case NODE_POSTFIX:
-		return ir_get_id(node->data.postfix.expr);
-	case NODE_PREFIX:
-		return ir_get_id(node->data.prefix.expr);
-	case NODE_CAST:
-		return ir_get_id(node->data.cast.cast);
-	case NODE_COMMA_LIST:
-		return ir_get_id(node->data.comma_list.data);
-	default:
-		assert(0);
-		return NULL;
-	}
-}
-
-int ir_get_id_size(struct node *id_node) {
-	struct type *type = type_get_from_node(id_node);
-	int size = IR_STORE_WORD;
-	if(type->kind == TYPE_BASIC)
-	{
-		if(type->data.basic.width == TYPE_WIDTH_CHAR)
-	 	{
- 			size = IR_STORE_BYTE;
-		}
-
- 		if(type->data.basic.width == TYPE_WIDTH_SHORT)
- 		{
- 			size = IR_STORE_HALF_WORD;
- 		}
- 	}
-	return size;
 }
 
 

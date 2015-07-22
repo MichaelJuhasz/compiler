@@ -103,6 +103,7 @@ struct ir_section {
 void ir_print_section(FILE *output, struct ir_section *section);
 void ir_generate_for_program(struct node *node);
 struct ir_operand *ir_convert_to_zero_one(struct ir_operand *result, struct ir_section *ir, int is_log_not);
+struct ir_operand *ir_convert_l_to_r(struct ir_operand *operand, struct ir_section *ir, struct node *id_node);
 
 
 extern FILE *error_output;
