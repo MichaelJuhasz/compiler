@@ -1,18 +1,9 @@
 To build type:
 
-To run unit tests type (will build scanner if not already built):
+make compiler
 
-make test
+To run a test that converts a variety of C code into SPIM instructions, type:
 
-make spimTest will run through a test program that includes recursive function calls, called within a for loop, whose return values are stored in arrays and later read out of these arrays and printed to the console.  The values produced through these function calls will eventually overflow the limits of my 32-bit words, but this is expected and handled reasonably (i.e. it doesn't blow up the compiler or spim). 
-
-To clean (doesn't remove scanner executable):
-
-make clean 
-
-To clobber (removes lexer):
-
-make clobber
-
+make spimTest
 
                                 
